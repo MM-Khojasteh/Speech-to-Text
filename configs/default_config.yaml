@@ -1,16 +1,16 @@
 # Default configuration for Speech Recognition Training
 
-# Model architecture parameters
+# Model architecture parameters (Enhanced for better accuracy)
 model:
-  n_cnn_layers: 3
-  n_rnn_layers: 5
-  rnn_dim: 384              # Reduced from 512 for 6GB GPU (25% reduction)
+  n_cnn_layers: 4           # Increased from 3 for better feature extraction
+  n_rnn_layers: 6           # Increased from 5 for better sequence modeling
+  rnn_dim: 448              # Increased from 384 (still fits in 6GB GPU)
   n_class: 29
   n_feats: 128
   stride: 2
   dropout: 0.1
   use_attention: true       # Re-enabled with chunked attention
-  n_attention_heads: 4      # Reduced from 8 for 6GB GPU (50% reduction)
+  n_attention_heads: 4      # Keep at 4 (good balance)
   use_transformer: false
   use_se: true              # Enable squeeze-and-excitation
   use_chunked_attention: true  # Use memory-efficient chunked attention
@@ -20,7 +20,7 @@ model:
 # Training parameters
 training:
   batch_size: 4             # Reduced from 10 for 6GB GPU
-  epochs: 1
+  epochs: 10                # Increased for better training (can stop early)
   learning_rate: 0.0005
   weight_decay: 0.00001
   gradient_accumulation_steps: 4  # Increased to maintain effective batch size of 16
@@ -29,8 +29,8 @@ training:
   num_workers: 4
   pin_memory: true
   validate_every: 1
-  save_every: 10
-  early_stopping_patience: null
+  save_every: 5             # Save more frequently
+  early_stopping_patience: 3  # Stop if no improvement for 3 epochs
   scheduler_type: "onecycle"
   scheduler_params:
     anneal_strategy: "linear"

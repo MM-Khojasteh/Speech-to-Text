@@ -140,12 +140,17 @@ class SpeechRecognitionModel(nn.Module):
             # BiGRU outputs rnn_dim * 2
             backbone_output_dim = rnn_dim * 2
         
-        # Classifier head
+        # Enhanced classifier head (deeper for better accuracy)
         self.classifier = nn.Sequential(
             nn.Linear(backbone_output_dim, rnn_dim),
+            nn.LayerNorm(rnn_dim),
             nn.GELU(),
             nn.Dropout(dropout),
-            nn.Linear(rnn_dim, n_class)
+            nn.Linear(rnn_dim, rnn_dim // 2),
+            nn.LayerNorm(rnn_dim // 2),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(rnn_dim // 2, n_class)
         )
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
