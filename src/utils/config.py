@@ -22,6 +22,9 @@ class ModelConfig:
     n_attention_heads: int = 8
     use_transformer: bool = False
     use_se: bool = False
+    use_chunked_attention: bool = True
+    attention_chunk_size: int = 512
+    attention_overlap: int = 64
 
 
 @dataclass
@@ -127,7 +130,10 @@ def save_config(config: Config, config_path: str) -> None:
             'use_attention': config.model.use_attention,
             'n_attention_heads': config.model.n_attention_heads,
             'use_transformer': config.model.use_transformer,
-            'use_se': config.model.use_se
+            'use_se': config.model.use_se,
+            'use_chunked_attention': config.model.use_chunked_attention,
+            'attention_chunk_size': config.model.attention_chunk_size,
+            'attention_overlap': config.model.attention_overlap
         },
         'training': {
             'batch_size': config.training.batch_size,

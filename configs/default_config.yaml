@@ -4,23 +4,26 @@
 model:
   n_cnn_layers: 3
   n_rnn_layers: 5
-  rnn_dim: 512
+  rnn_dim: 384              # Reduced from 512 for 6GB GPU (25% reduction)
   n_class: 29
   n_feats: 128
   stride: 2
   dropout: 0.1
-  use_attention: true
-  n_attention_heads: 8
+  use_attention: true       # Re-enabled with chunked attention
+  n_attention_heads: 4      # Reduced from 8 for 6GB GPU (50% reduction)
   use_transformer: false
-  use_se: false
+  use_se: true              # Enable squeeze-and-excitation
+  use_chunked_attention: true  # Use memory-efficient chunked attention
+  attention_chunk_size: 512     # Chunk size for attention (reduces memory)
+  attention_overlap: 64         # Overlap between chunks
 
 # Training parameters
 training:
-  batch_size: 10
+  batch_size: 4             # Reduced from 10 for 6GB GPU
   epochs: 1
   learning_rate: 0.0005
   weight_decay: 0.00001
-  gradient_accumulation_steps: 1
+  gradient_accumulation_steps: 4  # Increased to maintain effective batch size of 16
   max_grad_norm: 1.0
   use_amp: true
   num_workers: 4

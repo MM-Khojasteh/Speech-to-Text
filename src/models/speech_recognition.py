@@ -8,7 +8,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .cnn_blocks import ResidualCNN, CNNLayerNorm
-from .rnn_blocks import BidirectionalGRU, TransformerEncoderLayer, MultiHeadSelfAttention
+from .rnn_blocks import (
+    BidirectionalGRU, 
+    TransformerEncoderLayer, 
+    MultiHeadSelfAttention,
+    ChunkedMultiHeadSelfAttention
+)
 
 
 class SpeechRecognitionModel(nn.Module):
@@ -34,7 +39,10 @@ class SpeechRecognitionModel(nn.Module):
         use_attention: bool = True,
         n_attention_heads: int = 8,
         use_transformer: bool = False,
-        use_se: bool = False
+        use_se: bool = False,
+        use_chunked_attention: bool = True,
+        attention_chunk_size: int = 512,
+        attention_overlap: int = 64
     ):
         """
         Initialize speech recognition model.
@@ -51,10 +59,18 @@ class SpeechRecognitionModel(nn.Module):
             n_attention_heads: Number of attention heads
             use_transformer: If True, use Transformer instead of RNN
             use_se: Whether to use squeeze-and-excitation in CNN blocks
+            use_chunked_attention: If True, use memory-efficient chunked attention
+            attention_chunk_size: Size of each attention chunk (default: 512)
+            attention_overlap: Overlap between chunks (default: 64)
         """
         super(SpeechRecognitionModel, self).__init__()
         
-        self.n_feats = n_feats // 2  # After initial CNN
+        # After initial CNN with stride, frequency dimension is reduced
+        # Calculate actual frequency dimension after initial CNN
+        # With stride=2, kernel=3, padding=1: output_freq = (input_freq + 2*padding - kernel) // stride + 1
+        # For n_feats=128: (128 + 2*1 - 3) // 2 + 1 = 64
+        self.n_feats_after_cnn = n_feats // stride  # Frequency dimension after initial CNN
+        self.n_feats = n_feats  # Original frequency dimension
         self.rnn_dim = rnn_dim
         self.use_attention = use_attention
         self.use_transformer = use_transformer
@@ -64,25 +80,35 @@ class SpeechRecognitionModel(nn.Module):
             1, 32, kernel_size=3, stride=stride, padding=3 // 2
         )
         
-        # Residual CNN layers
+        # Residual CNN layers (use reduced frequency dimension)
         self.rescnn_layers = nn.Sequential(*[
             ResidualCNN(
                 32, 32, kernel=3, stride=1,
-                dropout=dropout, n_feats=self.n_feats, use_se=use_se
+                dropout=dropout, n_feats=self.n_feats_after_cnn, use_se=use_se
             )
             for _ in range(n_cnn_layers)
         ])
         
         # Fully connected layer to project CNN features to RNN dimension
-        self.fully_connected = nn.Linear(n_feats * 32, rnn_dim)
+        # After CNN: (batch, 32, n_feats_after_cnn, time) -> (batch, 32 * n_feats_after_cnn, time)
+        self.fully_connected = nn.Linear(self.n_feats_after_cnn * 32, rnn_dim)
         
-        # Optional multi-head self-attention
+        # Optional multi-head self-attention (chunked for memory efficiency)
         if use_attention:
-            self.attention = MultiHeadSelfAttention(
-                d_model=rnn_dim,
-                n_heads=n_attention_heads,
-                dropout=dropout
-            )
+            if use_chunked_attention:
+                self.attention = ChunkedMultiHeadSelfAttention(
+                    d_model=rnn_dim,
+                    n_heads=n_attention_heads,
+                    dropout=dropout,
+                    chunk_size=attention_chunk_size,
+                    overlap=attention_overlap
+                )
+            else:
+                self.attention = MultiHeadSelfAttention(
+                    d_model=rnn_dim,
+                    n_heads=n_attention_heads,
+                    dropout=dropout
+                )
         else:
             self.attention = None
         

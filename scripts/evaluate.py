@@ -45,14 +45,18 @@ def main():
     # Load configuration
     config = load_config(args.config)
     
-    # Set device
-    if config.device == "cuda" and not torch.cuda.is_available():
-        print("CUDA not available, using CPU")
-        device = torch.device("cpu")
+    # Set device with explicit GPU verification
+    if config.device == "cuda":
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+            print(f"Using GPU: {torch.cuda.get_device_name(0)}")
+            print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
+        else:
+            print("CUDA not available, using CPU")
+            device = torch.device("cpu")
     else:
         device = torch.device(config.device)
-    
-    print(f"Using device: {device}")
+        print(f"Using device: {device}")
     
     # Create text transform
     text_transform = TextTransform()
@@ -99,7 +103,10 @@ def main():
         use_attention=config.model.use_attention,
         n_attention_heads=config.model.n_attention_heads,
         use_transformer=config.model.use_transformer,
-        use_se=config.model.use_se
+        use_se=config.model.use_se,
+        use_chunked_attention=getattr(config.model, 'use_chunked_attention', True),
+        attention_chunk_size=getattr(config.model, 'attention_chunk_size', 512),
+        attention_overlap=getattr(config.model, 'attention_overlap', 64)
     ).to(device)
     
     # Load checkpoint

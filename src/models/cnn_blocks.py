@@ -12,17 +12,22 @@ class CNNLayerNorm(nn.Module):
     """
     Layer normalization built for CNN input.
     Handles the (batch, channel, feature, time) format.
+    Normalizes over the feature dimension.
     """
     
-    def __init__(self, n_feats: int):
+    def __init__(self, n_feats: int, eps: float = 1e-5):
         """
         Initialize CNN layer normalization.
         
         Args:
             n_feats: Number of feature dimensions
+            eps: Small value for numerical stability
         """
         super(CNNLayerNorm, self).__init__()
-        self.layer_norm = nn.LayerNorm(n_feats)
+        self.n_feats = n_feats
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(n_feats))
+        self.bias = nn.Parameter(torch.zeros(n_feats))
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -35,9 +40,16 @@ class CNNLayerNorm(nn.Module):
             Normalized tensor of same shape
         """
         # x: (batch, channel, feature, time)
-        x = x.transpose(2, 3).contiguous()  # (batch, channel, time, feature)
-        x = self.layer_norm(x)
-        return x.transpose(2, 3).contiguous()  # (batch, channel, feature, time)
+        # Normalize over feature dimension (dim=2)
+        mean = x.mean(dim=2, keepdim=True)
+        var = x.var(dim=2, keepdim=True, unbiased=False)
+        x = (x - mean) / torch.sqrt(var + self.eps)
+        # Apply learnable parameters (broadcast weight and bias over feature dimension)
+        # weight and bias have shape (n_feats,), need to reshape to (1, 1, n_feats, 1)
+        weight = self.weight.view(1, 1, self.n_feats, 1)
+        bias = self.bias.view(1, 1, self.n_feats, 1)
+        x = x * weight + bias
+        return x
 
 
 class SqueezeExcitation(nn.Module):
