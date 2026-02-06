@@ -49,10 +49,18 @@ class TrainingConfig:
 @dataclass
 class DataConfig:
     """Data configuration."""
+    dataset_type: str = "librispeech"  # "librispeech" or "custom"
     train_root: str = "/kaggle/input/librispeech-clean"
     test_root: str = "/kaggle/input/librispeech-clean"
     train_url: str = "train-clean-100"
     test_url: str = "test-clean"
+    # Custom dataset paths
+    audio_files_dir: str = "dataset/audio_files"
+    transcripts_dir: str = "dataset/info"
+    test_audio_dir: Optional[str] = None  # Separate test set directory
+    train_split: float = 0.8
+    include_persian: bool = True
+    # Audio processing
     sample_rate: int = 16000
     n_mels: int = 128
     freq_mask_param: int = 30
@@ -152,10 +160,16 @@ def save_config(config: Config, config_path: str) -> None:
             'scheduler_params': config.training.scheduler_params
         },
         'data': {
+            'dataset_type': config.data.dataset_type,
             'train_root': config.data.train_root,
             'test_root': config.data.test_root,
             'train_url': config.data.train_url,
             'test_url': config.data.test_url,
+            'audio_files_dir': config.data.audio_files_dir,
+            'transcripts_dir': config.data.transcripts_dir,
+            'test_audio_dir': config.data.test_audio_dir,
+            'train_split': config.data.train_split,
+            'include_persian': config.data.include_persian,
             'sample_rate': config.data.sample_rate,
             'n_mels': config.data.n_mels,
             'freq_mask_param': config.data.freq_mask_param,

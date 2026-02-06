@@ -25,10 +25,16 @@ A production-ready, modular implementation of speech recognition using PyTorch w
 - **Multi-worker Loading**: Fast data loading with pin memory
 
 ### Evaluation
-- **Word Error Rate (WER)**: Standard ASR metric
-- **Character Error Rate (CER)**: Character-level accuracy
+- **Comprehensive Metrics**: WER, CER, SER, Word/Character Accuracy, BLEU, ROUGE-L, Precision/Recall/F1
+- **Multiple Evaluation Levels**: Word-level and character-level metrics
 - **Greedy Decoding**: Fast inference
 - **Beam Search Decoding**: More accurate but slower (optional)
+
+### Dataset Support
+- **LibriSpeech**: Standard English speech dataset
+- **Custom Datasets**: Support for custom audio files with JSON transcripts
+- **Persian/Farsi Support**: Full support for Persian characters and mixed English/Persian content
+- **Three-Way Split**: Train (80%) / Validation (20%) / Test (separate directory)
 
 ## Installation
 
@@ -54,30 +60,68 @@ pip install -r requirements.txt
 Speech-to-Text/
 ├── src/
 │   ├── models/          # Model architectures
-│   ├── data/            # Data loading and processing
+│   ├── data/            # Data loading and processing (custom dataset support)
 │   ├── training/        # Training and validation
-│   ├── metrics/         # ASR metrics (WER, CER)
+│   ├── metrics/         # Comprehensive ASR metrics
 │   ├── inference/       # Decoding functions
 │   └── utils/           # Configuration and logging
 ├── configs/             # Configuration files
 ├── scripts/             # Training, evaluation, inference scripts
-├── checkpoints/         # Saved model checkpoints
+├── dataset/             # Custom dataset directory
+│   ├── audio_files/     # Training/validation audio files
+│   └── info/            # Transcript JSON files
+├── test_audio/          # Test set audio files
+├── checkpoints/          # Saved model checkpoints
 ├── logs/                # TensorBoard logs
-└── requirements.txt     # Python dependencies
+└── requirements.txt      # Python dependencies
 ```
 
 ## Quick Start
 
 ### 1. Prepare Data
 
+#### Option A: Using LibriSpeech Dataset
+
 Download the LibriSpeech dataset and update the paths in `configs/default_config.yaml`:
 
 ```yaml
 data:
+  dataset_type: "librispeech"
   train_root: "/path/to/librispeech"
   test_root: "/path/to/librispeech"
   train_url: "train-clean-100"
   test_url: "test-clean"
+```
+
+#### Option B: Using Custom Dataset
+
+Organize your audio files and transcripts:
+
+```
+dataset/
+├── audio_files/          # Training/validation audio files (.wav)
+│   ├── file1.wav
+│   ├── file2.wav
+│   └── ...
+├── info/                 # Transcript JSON files
+│   ├── postgres_laravel_calls.json
+│   └── postgres_public_call_transcripts.json
+test_audio/              # Test audio files (.wav)
+├── test1.wav
+├── test2.wav
+└── ...
+```
+
+Update `configs/default_config.yaml`:
+
+```yaml
+data:
+  dataset_type: "custom"
+  audio_files_dir: "dataset/audio_files"
+  transcripts_dir: "dataset/info"
+  test_audio_dir: "test_audio"
+  train_split: 0.8  # 80% train, 20% validation
+  include_persian: true  # Enable Persian character support
 ```
 
 ### 2. Configure Training
@@ -113,8 +157,19 @@ python scripts/train.py --config configs/default_config.yaml --resume checkpoint
 
 ### 4. Evaluate Model
 
+Evaluate on test set:
 ```bash
-python scripts/evaluate.py --checkpoint checkpoints/best_model.pth --config configs/default_config.yaml
+python scripts/evaluate.py --checkpoint checkpoints/best_model.pth --config configs/default_config.yaml --split test
+```
+
+Evaluate on validation set:
+```bash
+python scripts/evaluate.py --checkpoint checkpoints/best_model.pth --config configs/default_config.yaml --split val
+```
+
+Evaluate on training set:
+```bash
+python scripts/evaluate.py --checkpoint checkpoints/best_model.pth --config configs/default_config.yaml --split train
 ```
 
 ### 5. Run Inference
@@ -144,7 +199,13 @@ The configuration file (`configs/default_config.yaml`) contains all hyperparamet
 - `early_stopping_patience`: Early stopping patience (None to disable)
 
 ### Data Configuration
-- `train_root`, `test_root`: Dataset root directories
+- `dataset_type`: "librispeech" or "custom"
+- `train_root`, `test_root`: LibriSpeech dataset root directories (for librispeech type)
+- `audio_files_dir`: Custom dataset audio files directory (for custom type)
+- `transcripts_dir`: Custom dataset transcripts JSON directory (for custom type)
+- `test_audio_dir`: Separate test set directory (for custom type)
+- `train_split`: Train/validation split ratio (default: 0.8 for 80/20)
+- `include_persian`: Enable Persian character support (default: true)
 - `sample_rate`: Audio sample rate (default: 16000)
 - `n_mels`: Number of mel filter banks (default: 128)
 - `freq_mask_param`, `time_mask_param`: SpecAugment parameters
@@ -190,11 +251,13 @@ CTC Output
 ## Training Tips
 
 1. **Start Small**: Begin with a smaller model and dataset subset to verify setup
-2. **Monitor Metrics**: Use TensorBoard to track WER, CER, and loss
+2. **Monitor Metrics**: Use TensorBoard to track all metrics (WER, CER, BLEU, F1, etc.)
 3. **Adjust Learning Rate**: If loss doesn't decrease, try lower learning rates
 4. **Use AMP**: Enable AMP for faster training and lower memory usage
 5. **Gradient Accumulation**: Use if you want larger effective batch sizes
 6. **Early Stopping**: Set patience to prevent overfitting
+7. **Dataset Split**: Ensure train/val/test sets are properly separated (no overlap)
+8. **Persian Support**: If using Persian text, ensure `include_persian: true` in config
 
 ## Monitoring Training
 
@@ -207,10 +270,27 @@ Then open `http://localhost:6006` in your browser.
 
 ## Evaluation Metrics
 
-- **WER (Word Error Rate)**: Percentage of words incorrectly predicted
-- **CER (Character Error Rate)**: Percentage of characters incorrectly predicted
+The system provides comprehensive evaluation metrics:
 
-Lower is better for both metrics.
+### Error Rates
+- **WER (Word Error Rate)**: Percentage of words incorrectly predicted (lower is better)
+- **CER (Character Error Rate)**: Percentage of characters incorrectly predicted (lower is better)
+- **SER (Sentence Error Rate)**: Percentage of sentences with any error (lower is better)
+
+### Accuracy Metrics
+- **Word Accuracy**: Percentage of words correctly recognized (higher is better)
+- **Character Accuracy**: Percentage of characters correctly recognized (higher is better)
+- **Exact Match Rate**: Percentage of perfect sentence matches (higher is better)
+
+### N-gram Metrics
+- **BLEU Score**: N-gram overlap between reference and hypothesis (higher is better)
+- **ROUGE-L Score**: Longest common subsequence similarity (higher is better)
+
+### Precision/Recall/F1
+- **Word-level**: Precision, Recall, and F1 at word level
+- **Character-level**: Precision, Recall, and F1 at character level
+
+All metrics are automatically calculated during validation and evaluation. See `METRICS_DOCUMENTATION.md` for detailed information.
 
 ## Troubleshooting
 
@@ -246,6 +326,14 @@ If you use this code, please cite:
 ## License
 
 [Specify your license here]
+
+## Documentation
+
+- **README.md**: This file - main project documentation
+- **TRAINING_GUIDE.md**: Detailed training instructions and tips
+- **DATASET_GUIDE.md**: Custom dataset setup and usage guide
+- **METRICS_DOCUMENTATION.md**: Comprehensive evaluation metrics documentation
+- **ARCHITECTURE_SUMMARY.md**: Model architecture details
 
 ## Acknowledgments
 

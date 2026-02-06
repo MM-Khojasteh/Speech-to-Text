@@ -10,7 +10,7 @@ from typing import Dict, Tuple
 from ..models.speech_recognition import SpeechRecognitionModel
 from ..data.text_transform import TextTransform
 from ..inference.decoder import greedy_decoder
-from ..metrics.asr_metrics import wer, cer
+from ..metrics.asr_metrics import wer, cer, calculate_batch_metrics
 
 
 class Validator:
@@ -99,36 +99,61 @@ class Validator:
         # Calculate average metrics
         avg_loss = total_loss / len(validation_loader)
         
-        # Calculate WER and CER
-        wer_scores = []
-        cer_scores = []
+        # Filter out empty references/hypotheses for metric calculation
+        valid_pairs = [
+            (ref, hyp) for ref, hyp in zip(all_true_texts, all_predicted_texts)
+            if ref.strip() and hyp.strip()
+        ]
         
-        for ref, hyp in zip(all_true_texts, all_predicted_texts):
-            try:
-                wer_scores.append(wer(ref, hyp))
-            except ValueError:
-                # Skip if reference is empty
-                pass
-            try:
-                cer_scores.append(cer(ref, hyp))
-            except ValueError:
-                # Skip if reference is empty
-                pass
+        if len(valid_pairs) == 0:
+            metrics = {
+                'loss': avg_loss,
+                'wer': float('inf'),
+                'cer': float('inf')
+            }
+            if verbose:
+                print(f"\nValidation Results:")
+                print(f"  Loss: {avg_loss:.6f}")
+                print(f"  Warning: No valid reference-hypothesis pairs for metrics")
+            return metrics
         
-        avg_wer = np.mean(wer_scores) if wer_scores else float('inf')
-        avg_cer = np.mean(cer_scores) if cer_scores else float('inf')
+        valid_refs, valid_hyps = zip(*valid_pairs)
         
+        # Calculate comprehensive metrics
+        batch_metrics = calculate_batch_metrics(
+            list(valid_refs),
+            list(valid_hyps),
+            ignore_case=False
+        )
+        
+        # Combine with loss
         metrics = {
             'loss': avg_loss,
-            'wer': avg_wer,
-            'cer': avg_cer
+            **batch_metrics
         }
         
         if verbose:
             print(f"\nValidation Results:")
             print(f"  Loss: {avg_loss:.6f}")
-            print(f"  WER:  {avg_wer:.4f}")
-            print(f"  CER:  {avg_cer:.4f}")
+            print(f"\n  Error Rates:")
+            print(f"    WER:  {metrics.get('wer', float('inf')):.4f}")
+            print(f"    CER:  {metrics.get('cer', float('inf')):.4f}")
+            print(f"    SER:  {metrics.get('ser', float('inf')):.4f}")
+            print(f"\n  Accuracies:")
+            print(f"    Word Accuracy:     {metrics.get('word_accuracy', 0.0):.4f}")
+            print(f"    Character Accuracy: {metrics.get('character_accuracy', 0.0):.4f}")
+            print(f"    Exact Match Rate:  {metrics.get('exact_match_rate', 0.0):.4f}")
+            print(f"\n  N-gram Metrics:")
+            print(f"    BLEU:    {metrics.get('bleu', 0.0):.4f}")
+            print(f"    ROUGE-L: {metrics.get('rouge_l', 0.0):.4f}")
+            print(f"\n  Word-level Precision/Recall/F1:")
+            print(f"    Precision: {metrics.get('word_precision', 0.0):.4f}")
+            print(f"    Recall:    {metrics.get('word_recall', 0.0):.4f}")
+            print(f"    F1:        {metrics.get('word_f1', 0.0):.4f}")
+            print(f"\n  Character-level Precision/Recall/F1:")
+            print(f"    Precision: {metrics.get('char_precision', 0.0):.4f}")
+            print(f"    Recall:    {metrics.get('char_recall', 0.0):.4f}")
+            print(f"    F1:        {metrics.get('char_f1', 0.0):.4f}")
         
         return metrics
 

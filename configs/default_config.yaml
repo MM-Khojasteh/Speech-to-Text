@@ -5,7 +5,7 @@ model:
   n_cnn_layers: 4           # Increased from 3 for better feature extraction
   n_rnn_layers: 6           # Increased from 5 for better sequence modeling
   rnn_dim: 448              # Increased from 384 (still fits in 6GB GPU)
-  n_class: 29
+  n_class: 29  # Will be updated dynamically based on TextTransform vocabulary size
   n_feats: 128
   stride: 2
   dropout: 0.1
@@ -37,10 +37,19 @@ training:
 
 # Data parameters
 data:
+  dataset_type: "custom"  # "librispeech" or "custom"
+  # LibriSpeech paths (used when dataset_type is "librispeech")
   train_root: "/kaggle/input/librispeech-clean"
   test_root: "/kaggle/input/librispeech-clean"
   train_url: "train-clean-100"
   test_url: "test-clean"
+  # Custom dataset paths (used when dataset_type is "custom")
+  audio_files_dir: "dataset/audio_files"
+  transcripts_dir: "dataset/info"
+  test_audio_dir: "test_audio"  # Separate test set directory
+  train_split: 0.8  # 80% train, 20% validation
+  include_persian: true  # Enable Persian character support
+  # Audio processing
   sample_rate: 16000
   n_mels: 128
   freq_mask_param: 30

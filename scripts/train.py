@@ -15,7 +15,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.models.speech_recognition import SpeechRecognitionModel
-from src.data.dataset import get_data_loaders
+from src.data.dataset import get_data_loaders, get_custom_data_loaders
 from src.data.text_transform import TextTransform
 from src.training.trainer import Trainer
 from src.utils.config import load_config
@@ -107,35 +107,75 @@ def main():
         device = torch.device(config.device)
         print(f"Using device: {device}")
     
-    # Create text transform
-    text_transform = TextTransform()
+    # Create text transform (with Persian support if enabled)
+    include_persian = getattr(config.data, 'include_persian', True)
+    text_transform = TextTransform(include_persian=include_persian)
     
-    # Get data loaders
+    # Get vocabulary size dynamically from TextTransform
+    vocab_size = text_transform.get_vocab_size()
+    print(f"Vocabulary size: {vocab_size} (includes blank token)")
+    
+    # Get data loaders based on dataset type
     print("Loading datasets...")
-    train_loader, val_loader = get_data_loaders(
-        train_root=config.data.train_root,
-        test_root=config.data.test_root,
-        train_url=config.data.train_url,
-        test_url=config.data.test_url,
-        batch_size=config.training.batch_size,
-        num_workers=config.training.num_workers,
-        pin_memory=config.training.pin_memory,
-        sample_rate=config.data.sample_rate,
-        n_mels=config.data.n_mels,
-        freq_mask_param=config.data.freq_mask_param,
-        time_mask_param=config.data.time_mask_param
-    )
+    dataset_type = getattr(config.data, 'dataset_type', 'librispeech').lower()
     
-    print(f"Train batches: {len(train_loader)}")
-    print(f"Validation batches: {len(val_loader)}")
+    if dataset_type == 'custom':
+        print(f"Using custom dataset from {config.data.audio_files_dir}")
+        test_audio_dir = getattr(config.data, 'test_audio_dir', None)
+        train_loader, val_loader, test_loader, text_transform = get_custom_data_loaders(
+            audio_files_dir=config.data.audio_files_dir,
+            transcripts_dir=config.data.transcripts_dir,
+            batch_size=config.training.batch_size,
+            num_workers=config.training.num_workers,
+            pin_memory=config.training.pin_memory,
+            sample_rate=config.data.sample_rate,
+            n_mels=config.data.n_mels,
+            freq_mask_param=config.data.freq_mask_param,
+            time_mask_param=config.data.time_mask_param,
+            train_split=getattr(config.data, 'train_split', 0.8),
+            seed=config.seed,
+            include_persian=include_persian,
+            test_audio_dir=test_audio_dir
+        )
+        # Update vocab size after loading custom dataset (in case it changed)
+        vocab_size = text_transform.get_vocab_size()
+        print(f"Vocabulary size after dataset load: {vocab_size}")
+        
+        if test_loader is not None:
+            print(f"Test batches: {len(test_loader)} (from {test_audio_dir})")
+        else:
+            print("No test set loaded (test_audio_dir not provided or empty)")
+    else:
+        print(f"Using LibriSpeech dataset")
+        train_loader, val_loader = get_data_loaders(
+            train_root=config.data.train_root,
+            test_root=config.data.test_root,
+            train_url=config.data.train_url,
+            test_url=config.data.test_url,
+            batch_size=config.training.batch_size,
+            num_workers=config.training.num_workers,
+            pin_memory=config.training.pin_memory,
+            sample_rate=config.data.sample_rate,
+            n_mels=config.data.n_mels,
+            freq_mask_param=config.data.freq_mask_param,
+            time_mask_param=config.data.time_mask_param
+        )
     
-    # Create model
+    print(f"\nDataset Summary:")
+    print(f"  Train batches: {len(train_loader)}")
+    print(f"  Validation batches: {len(val_loader)}")
+    
+    # Create model with dynamic vocabulary size
     print("Creating model...")
+    # Use vocab_size from TextTransform instead of config (which may be outdated)
+    n_class = vocab_size
+    print(f"Using n_class={n_class} (from TextTransform vocabulary)")
+    
     model = SpeechRecognitionModel(
         n_cnn_layers=config.model.n_cnn_layers,
         n_rnn_layers=config.model.n_rnn_layers,
         rnn_dim=config.model.rnn_dim,
-        n_class=config.model.n_class,
+        n_class=n_class,  # Use dynamic vocabulary size
         n_feats=config.model.n_feats,
         stride=config.model.stride,
         dropout=config.model.dropout,

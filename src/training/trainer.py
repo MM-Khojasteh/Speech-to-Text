@@ -241,9 +241,40 @@ class Trainer:
                 
                 # Log validation metrics
                 if self.writer is not None:
+                    # Core metrics
                     self.writer.add_scalar('Val/Loss', val_metrics['loss'], epoch)
-                    self.writer.add_scalar('Val/WER', val_metrics['wer'], epoch)
-                    self.writer.add_scalar('Val/CER', val_metrics['cer'], epoch)
+                    self.writer.add_scalar('Val/WER', val_metrics.get('wer', float('inf')), epoch)
+                    self.writer.add_scalar('Val/CER', val_metrics.get('cer', float('inf')), epoch)
+                    
+                    # Error rates
+                    if 'ser' in val_metrics:
+                        self.writer.add_scalar('Val/SER', val_metrics['ser'], epoch)
+                    
+                    # Accuracies
+                    if 'word_accuracy' in val_metrics:
+                        self.writer.add_scalar('Val/WordAccuracy', val_metrics['word_accuracy'], epoch)
+                    if 'character_accuracy' in val_metrics:
+                        self.writer.add_scalar('Val/CharAccuracy', val_metrics['character_accuracy'], epoch)
+                    if 'exact_match_rate' in val_metrics:
+                        self.writer.add_scalar('Val/ExactMatchRate', val_metrics['exact_match_rate'], epoch)
+                    
+                    # N-gram metrics
+                    if 'bleu' in val_metrics:
+                        self.writer.add_scalar('Val/BLEU', val_metrics['bleu'], epoch)
+                    if 'rouge_l' in val_metrics:
+                        self.writer.add_scalar('Val/ROUGE-L', val_metrics['rouge_l'], epoch)
+                    
+                    # Word-level PRF
+                    if 'word_f1' in val_metrics:
+                        self.writer.add_scalar('Val/WordF1', val_metrics['word_f1'], epoch)
+                        self.writer.add_scalar('Val/WordPrecision', val_metrics.get('word_precision', 0.0), epoch)
+                        self.writer.add_scalar('Val/WordRecall', val_metrics.get('word_recall', 0.0), epoch)
+                    
+                    # Character-level PRF
+                    if 'char_f1' in val_metrics:
+                        self.writer.add_scalar('Val/CharF1', val_metrics['char_f1'], epoch)
+                        self.writer.add_scalar('Val/CharPrecision', val_metrics.get('char_precision', 0.0), epoch)
+                        self.writer.add_scalar('Val/CharRecall', val_metrics.get('char_recall', 0.0), epoch)
             
             # Save periodic checkpoint
             if (epoch + 1) % save_every == 0:
