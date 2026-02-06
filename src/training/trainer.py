@@ -174,11 +174,11 @@ class Trainer:
                     )
                     self.optimizer.step()
                 
-                self.optimizer.zero_grad()
-                
-                # Update learning rate
+                # Update learning rate (must be after optimizer.step())
                 if self.scheduler is not None:
                     self.scheduler.step()
+                
+                self.optimizer.zero_grad()
                 
                 # Clear cache periodically to help with memory management
                 if (batch_idx + 1) % (self.gradient_accumulation_steps * 2) == 0:

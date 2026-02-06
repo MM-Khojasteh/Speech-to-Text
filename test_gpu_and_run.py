@@ -97,7 +97,7 @@ try:
     print(f"Model output shape: {output.shape}")
     
     # Decode
-    decoded_output = greedy_decoder(output)
+    decoded_output = greedy_decoder(output, blank_label=text_transform.blank_id)
     predicted_text = text_transform.int_to_text(decoded_output[0]) if decoded_output else ""
     
     print("\n" + "="*50)

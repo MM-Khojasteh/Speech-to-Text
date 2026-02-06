@@ -99,7 +99,7 @@ def speech_to_text_chunked(
             output = torch.nn.functional.log_softmax(output, dim=2)
             
             # Decode output
-            decoded_output = greedy_decoder(output)
+            decoded_output = greedy_decoder(output, blank_label=text_transform.blank_id)
             if decoded_output and len(decoded_output) > 0:
                 all_decoded_outputs.extend(decoded_output[0])
             
@@ -182,7 +182,7 @@ def speech_to_text(
         output = torch.nn.functional.log_softmax(output, dim=2)
     
     # Decode output
-    decoded_output = greedy_decoder(output)
+    decoded_output = greedy_decoder(output, blank_label=text_transform.blank_id)
     
     # Convert to text
     if decoded_output and len(decoded_output) > 0:

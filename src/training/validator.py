@@ -85,7 +85,7 @@ class Validator:
                 
                 # Decode predictions
                 output_for_decoding = output.transpose(0, 1)  # Back to (batch, time, classes)
-                decoded_outputs = greedy_decoder(output_for_decoding)
+                decoded_outputs = greedy_decoder(output_for_decoding, blank_label=self.text_transform.blank_id)
                 
                 # Convert to text
                 predicted_texts = [

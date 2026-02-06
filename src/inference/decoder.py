@@ -10,7 +10,7 @@ from collections import defaultdict
 
 def greedy_decoder(
     output_probs: torch.Tensor,
-    blank_label: int = 28
+    blank_label: int = 0
 ) -> List[List[int]]:
     """
     Greedy decoder for CTC outputs.
@@ -20,7 +20,7 @@ def greedy_decoder(
     Args:
         output_probs: Output probabilities/logits of shape (batch, time, n_classes)
                       or (time, batch, n_classes) for CTC
-        blank_label: Index of the blank token (default: 28)
+        blank_label: Index of the blank token (default: 0, but should be passed from text_transform.blank_id)
         
     Returns:
         List of decoded sequences (list of integer lists)
@@ -56,7 +56,7 @@ def greedy_decoder(
 def beam_search_decoder(
     output_probs: torch.Tensor,
     beam_width: int = 10,
-    blank_label: int = 28,
+    blank_label: int = 0,
     blank_penalty: float = 0.0
 ) -> List[List[int]]:
     """
@@ -66,7 +66,7 @@ def beam_search_decoder(
     Args:
         output_probs: Output log probabilities of shape (batch, time, n_classes)
         beam_width: Width of the beam (number of hypotheses to keep)
-        blank_label: Index of the blank token
+        blank_label: Index of the blank token (default: 0, but should be passed from text_transform.blank_id)
         blank_penalty: Penalty for blank tokens (negative value encourages blanks)
         
     Returns:
