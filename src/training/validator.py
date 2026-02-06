@@ -61,6 +61,7 @@ class Validator:
         total_loss = 0.0
         all_predicted_texts = []
         all_true_texts = []
+        sample_pairs = []  # Store first few pairs for display
         
         with torch.no_grad():
             iterator = tqdm(validation_loader, desc="Validating") if verbose else validation_loader
@@ -88,14 +89,38 @@ class Validator:
                 decoded_outputs = greedy_decoder(output_for_decoding, blank_label=self.text_transform.blank_id)
                 
                 # Convert to text
-                predicted_texts = [
-                    self.text_transform.int_to_text(seq)
-                    for seq in decoded_outputs
-                ]
-                true_texts = [
-                    self.text_transform.int_to_text(label.tolist())
-                    for label in labels
-                ]
+                predicted_texts = []
+                for seq in decoded_outputs:
+                    text = self.text_transform.int_to_text(seq)
+                    # Ensure we have a string, not a list
+                    if isinstance(text, list):
+                        text = text[0] if text else ''
+                    predicted_texts.append(str(text) if text else '')
+                
+                # Fix: Use label_lengths to slice only the actual label portion (not padding)
+                true_texts = []
+                for label, label_len in zip(labels, label_lengths):
+                    text = self.text_transform.int_to_text(label[:label_len].tolist())
+                    # Ensure we have a string, not a list
+                    if isinstance(text, list):
+                        text = text[0] if text else ''
+                    true_texts.append(str(text) if text else '')
+                
+                # Ensure both lists have the same length
+                batch_size = len(true_texts)
+                if len(predicted_texts) != batch_size:
+                    # Pad or truncate to match
+                    if len(predicted_texts) < batch_size:
+                        predicted_texts.extend([''] * (batch_size - len(predicted_texts)))
+                    else:
+                        predicted_texts = predicted_texts[:batch_size]
+                
+                # Store sample pairs (first batch, up to 5 samples)
+                if batch_idx == 0 and len(sample_pairs) < 5:
+                    for ref, hyp in zip(true_texts, predicted_texts):
+                        if len(sample_pairs) >= 5:
+                            break
+                        sample_pairs.append((ref, hyp))
                 
                 all_predicted_texts.extend(predicted_texts)
                 all_true_texts.extend(true_texts)
@@ -103,10 +128,24 @@ class Validator:
         # Calculate average metrics
         avg_loss = total_loss / len(validation_loader)
         
+        # Ensure both lists are the same length (safety check)
+        min_length = min(len(all_true_texts), len(all_predicted_texts))
+        if len(all_true_texts) != len(all_predicted_texts):
+            print(f"Warning: Mismatch in list lengths - true_texts: {len(all_true_texts)}, predicted_texts: {len(all_predicted_texts)}")
+            all_true_texts = all_true_texts[:min_length]
+            all_predicted_texts = all_predicted_texts[:min_length]
+        
+        # Calculate statistics
+        total_pairs = len(all_true_texts)
+        empty_refs = sum(1 for ref in all_true_texts if isinstance(ref, str) and not ref.strip())
+        empty_hyps = sum(1 for hyp in all_predicted_texts if isinstance(hyp, str) and not hyp.strip())
+        non_empty_refs = total_pairs - empty_refs
+        non_empty_hyps = total_pairs - empty_hyps
+        
         # Filter out empty references/hypotheses for metric calculation
         valid_pairs = [
             (ref, hyp) for ref, hyp in zip(all_true_texts, all_predicted_texts)
-            if ref.strip() and hyp.strip()
+            if isinstance(ref, str) and isinstance(hyp, str) and ref.strip() and hyp.strip()
         ]
         
         if len(valid_pairs) == 0:
@@ -118,7 +157,33 @@ class Validator:
             if verbose:
                 print(f"\nValidation Results:")
                 print(f"  Loss: {avg_loss:.6f}")
-                print(f"  Warning: No valid reference-hypothesis pairs for metrics")
+                print(f"\n  Statistics:")
+                print(f"    Total samples: {total_pairs}")
+                print(f"    Empty references: {empty_refs} ({100*empty_refs/max(total_pairs,1):.1f}%)")
+                print(f"    Empty predictions: {empty_hyps} ({100*empty_hyps/max(total_pairs,1):.1f}%)")
+                print(f"    Valid pairs (both non-empty): {len(valid_pairs)}")
+                print(f"\n  Warning: No valid reference-hypothesis pairs for metrics")
+                
+                # Show sample pairs even if empty
+                if sample_pairs:
+                    print(f"\n  Sample Predictions (first {len(sample_pairs)}):")
+                    for i, (ref, hyp) in enumerate(sample_pairs, 1):
+                        ref_str = str(ref) if not isinstance(ref, str) else ref
+                        hyp_str = str(hyp) if not isinstance(hyp, str) else hyp
+                        ref_display = ref_str[:50] + "..." if len(ref_str) > 50 else ref_str
+                        hyp_display = hyp_str[:50] + "..." if len(hyp_str) > 50 else hyp_str
+                        ref_status = "(empty)" if not ref_str.strip() else ""
+                        hyp_status = "(empty)" if not hyp_str.strip() else ""
+                        print(f"    {i}. Reference: {ref_display} {ref_status}")
+                        print(f"       Prediction: {hyp_display} {hyp_status}")
+                
+                # Show sample non-empty references if all predictions are empty
+                if empty_hyps == total_pairs and non_empty_refs > 0:
+                    print(f"\n  Sample References (what model should learn):")
+                    sample_refs = [ref for ref in all_true_texts if isinstance(ref, str) and ref.strip()][:3]
+                    for i, ref in enumerate(sample_refs, 1):
+                        ref_display = ref[:60] + "..." if len(ref) > 60 else ref
+                        print(f"    {i}. {ref_display}")
             return metrics
         
         valid_refs, valid_hyps = zip(*valid_pairs)
@@ -139,6 +204,25 @@ class Validator:
         if verbose:
             print(f"\nValidation Results:")
             print(f"  Loss: {avg_loss:.6f}")
+            print(f"\n  Statistics:")
+            print(f"    Total samples: {total_pairs}")
+            print(f"    Empty references: {empty_refs} ({100*empty_refs/max(total_pairs,1):.1f}%)")
+            print(f"    Empty predictions: {empty_hyps} ({100*empty_hyps/max(total_pairs,1):.1f}%)")
+            print(f"    Valid pairs (both non-empty): {len(valid_pairs)} ({100*len(valid_pairs)/max(total_pairs,1):.1f}%)")
+            
+            # Show sample predictions
+            if sample_pairs:
+                print(f"\n  Sample Predictions (first {min(len(sample_pairs), 5)}):")
+                for i, (ref, hyp) in enumerate(sample_pairs[:5], 1):
+                    ref_str = str(ref) if not isinstance(ref, str) else ref
+                    hyp_str = str(hyp) if not isinstance(hyp, str) else hyp
+                    ref_display = ref_str[:60] + "..." if len(ref_str) > 60 else ref_str
+                    hyp_display = hyp_str[:60] + "..." if len(hyp_str) > 60 else hyp_str
+                    ref_status = " (empty)" if not ref_str.strip() else ""
+                    hyp_status = " (empty)" if not hyp_str.strip() else ""
+                    print(f"    {i}. Reference: {ref_display}{ref_status}")
+                    print(f"       Prediction: {hyp_display}{hyp_status}")
+            
             print(f"\n  Error Rates:")
             print(f"    WER:  {metrics.get('wer', float('inf')):.4f}")
             print(f"    CER:  {metrics.get('cer', float('inf')):.4f}")
