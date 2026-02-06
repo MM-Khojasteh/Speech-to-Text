@@ -2,35 +2,35 @@
 
 # Model architecture parameters (Optimized for 6GB GPU)
 model:
-  n_cnn_layers: 3           # Reduced for memory efficiency
-  n_rnn_layers: 4           # Reduced from 6 for memory efficiency
-  rnn_dim: 256              # Reduced from 448 for 6GB GPU memory constraints
+  n_cnn_layers: 2           # Reduced for memory efficiency
+  n_rnn_layers: 3           # Reduced from 6 for memory efficiency
+  rnn_dim: 128              # Reduced from 448 for 6GB GPU memory constraints
   n_class: 29  # Will be updated dynamically based on TextTransform vocabulary size
-  n_feats: 128
+  n_feats: 64
   stride: 2
   dropout: 0.1
   use_attention: true       # Re-enabled with chunked attention
-  n_attention_heads: 4      # Keep at 4 (good balance)
+  n_attention_heads: 2      # Keep at 4 (good balance)
   use_transformer: false
   use_se: true              # Enable squeeze-and-excitation
   use_chunked_attention: true  # Use memory-efficient chunked attention
-  attention_chunk_size: 256     # Reduced chunk size for memory efficiency
-  attention_overlap: 32         # Reduced overlap for memory efficiency
+  attention_chunk_size: 128     # Reduced chunk size for memory efficiency
+  attention_overlap: 16         # Reduced overlap for memory efficiency
 
 # Training parameters
 training:
-  batch_size: 2             # Reduced to 2 for 6GB GPU memory constraints
-  epochs: 10                # Increased for better training (can stop early)
-  learning_rate: 0.0005
+  batch_size: 1             # Reduced to 2 for 6GB GPU memory constraints
+  epochs: 5                # Increased for better training (can stop early)
+  learning_rate: 0.0001
   weight_decay: 0.00001
-  gradient_accumulation_steps: 8  # Increased to maintain effective batch size of 16
+  gradient_accumulation_steps: 4  # Increased to maintain effective batch size of 16
   max_grad_norm: 1.0
   use_amp: true
-  num_workers: 4
+  num_workers: 2
   pin_memory: true
-  validate_every: 1
-  save_every: 5             # Save more frequently
-  early_stopping_patience: 3  # Stop if no improvement for 3 epochs
+  validate_every: 2
+  save_every: 3             # Save more frequently
+  early_stopping_patience: 2  # Stop if no improvement for 3 epochs
   scheduler_type: "onecycle"
   scheduler_params:
     anneal_strategy: "linear"
@@ -47,15 +47,15 @@ data:
   audio_files_dir: "dataset/audio_files"
   transcripts_dir: "dataset/info"
   test_audio_dir: "dataset/test_audio"  # Separate test set directory
-  train_split: 0.8  # 80% train, 20% validation
+  train_split: 0.7  # 80% train, 20% validation
   include_persian: true  # Enable Persian character support
   # Audio processing
   sample_rate: 16000
-  n_mels: 128
-  freq_mask_param: 30
-  time_mask_param: 100
-  num_freq_masks: 2
-  num_time_masks: 2
+  n_mels: 64
+  freq_mask_param: 15
+  time_mask_param: 50
+  num_freq_masks: 1
+  num_time_masks: 1
 
 # General settings
 checkpoint_dir: "checkpoints"
