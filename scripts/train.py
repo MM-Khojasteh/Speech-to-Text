@@ -210,7 +210,7 @@ def main():
     from src.training.ctc_loss_with_penalty import CTCLossWithBlankPenalty
     criterion = CTCLossWithBlankPenalty(
         blank=text_transform.blank_id,
-        blank_penalty_weight=0.1  # Penalty weight for blank token predictions
+        blank_penalty_weight=30.0  # Very strong penalty weight to prevent blank bias
     ).to(device)
     
     # Create trainer
