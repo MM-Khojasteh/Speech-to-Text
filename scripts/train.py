@@ -10,6 +10,7 @@ import random
 import numpy as np
 from pathlib import Path
 import sys
+import platform
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -100,6 +101,9 @@ def main():
             print(f"Using GPU: {torch.cuda.get_device_name(0)}")
             print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
             print(f"CUDA Version: {torch.version.cuda}")
+            # Clear GPU cache before training
+            torch.cuda.empty_cache()
+            print(f"Initial GPU memory allocated: {torch.cuda.memory_allocated(0) / 1024**3:.2f} GB")
         else:
             print("CUDA not available, using CPU")
             device = torch.device("cpu")
@@ -119,6 +123,12 @@ def main():
     print("Loading datasets...")
     dataset_type = getattr(config.data, 'dataset_type', 'librispeech').lower()
     
+    # On Windows, set num_workers to 0 to avoid multiprocessing issues
+    num_workers = config.training.num_workers
+    if platform.system() == 'Windows' and num_workers > 0:
+        print(f"Windows detected: Setting num_workers to 0 (was {num_workers}) to avoid multiprocessing issues")
+        num_workers = 0
+    
     if dataset_type == 'custom':
         print(f"Using custom dataset from {config.data.audio_files_dir}")
         test_audio_dir = getattr(config.data, 'test_audio_dir', None)
@@ -126,7 +136,7 @@ def main():
             audio_files_dir=config.data.audio_files_dir,
             transcripts_dir=config.data.transcripts_dir,
             batch_size=config.training.batch_size,
-            num_workers=config.training.num_workers,
+            num_workers=num_workers,
             pin_memory=config.training.pin_memory,
             sample_rate=config.data.sample_rate,
             n_mels=config.data.n_mels,
@@ -153,7 +163,7 @@ def main():
             train_url=config.data.train_url,
             test_url=config.data.test_url,
             batch_size=config.training.batch_size,
-            num_workers=config.training.num_workers,
+            num_workers=num_workers,
             pin_memory=config.training.pin_memory,
             sample_rate=config.data.sample_rate,
             n_mels=config.data.n_mels,

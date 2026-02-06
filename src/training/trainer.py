@@ -5,7 +5,7 @@ Training utilities for speech recognition model with advanced features.
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 from tqdm import tqdm
 from typing import Optional, Dict, Any
 import os
@@ -74,8 +74,8 @@ class Trainer:
         self.save_best = save_best
         self.early_stopping_patience = early_stopping_patience
         
-        # AMP scaler
-        self.scaler = GradScaler() if use_amp else None
+        # AMP scaler (using new API for PyTorch 2.0+)
+        self.scaler = GradScaler('cuda') if use_amp else None
         
         # Validator
         if val_loader is not None:
@@ -125,13 +125,17 @@ class Trainer:
         self.optimizer.zero_grad()
         
         for batch_idx, data in progress_bar:
+            # Handle empty batches (can occur with multiprocessing on Windows)
+            if data is None:
+                continue
+            
             spectrograms, labels, input_lengths, label_lengths = data
             spectrograms = spectrograms.to(self.device)
             labels = labels.to(self.device)
             
             # Forward pass with AMP
             if self.use_amp:
-                with autocast():
+                with autocast(device_type='cuda'):
                     output = self.model(spectrograms)
                     output = torch.nn.functional.log_softmax(output, dim=2)
                     output = output.transpose(0, 1)  # CTC expects (time, batch, classes)
@@ -175,6 +179,10 @@ class Trainer:
                 # Update learning rate
                 if self.scheduler is not None:
                     self.scheduler.step()
+                
+                # Clear cache periodically to help with memory management
+                if (batch_idx + 1) % (self.gradient_accumulation_steps * 2) == 0:
+                    torch.cuda.empty_cache()
             
             # Update progress bar
             progress_bar.set_postfix({
@@ -219,7 +227,13 @@ class Trainer:
             # Validation
             val_metrics = None
             if self.val_loader is not None and (epoch + 1) % validate_every == 0:
+                # Clear cache before validation
+                if self.device.type == 'cuda':
+                    torch.cuda.empty_cache()
                 val_metrics = self.validator.validate(self.val_loader, self.criterion)
+                # Clear cache after validation
+                if self.device.type == 'cuda':
+                    torch.cuda.empty_cache()
                 
                 # Check for best model
                 if self.save_best and val_metrics['loss'] < self.best_val_loss:

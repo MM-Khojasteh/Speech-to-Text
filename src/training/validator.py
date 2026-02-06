@@ -66,6 +66,10 @@ class Validator:
             iterator = tqdm(validation_loader, desc="Validating") if verbose else validation_loader
             
             for batch_idx, data in enumerate(iterator):
+                # Handle empty batches (can occur with multiprocessing on Windows)
+                if data is None:
+                    continue
+                
                 spectrograms, labels, input_lengths, label_lengths = data
                 spectrograms = spectrograms.to(self.device)
                 labels = labels.to(self.device)

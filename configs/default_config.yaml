@@ -1,10 +1,10 @@
 # Default configuration for Speech Recognition Training
 
-# Model architecture parameters (Enhanced for better accuracy)
+# Model architecture parameters (Optimized for 6GB GPU)
 model:
-  n_cnn_layers: 4           # Increased from 3 for better feature extraction
-  n_rnn_layers: 6           # Increased from 5 for better sequence modeling
-  rnn_dim: 448              # Increased from 384 (still fits in 6GB GPU)
+  n_cnn_layers: 3           # Reduced for memory efficiency
+  n_rnn_layers: 4           # Reduced from 6 for memory efficiency
+  rnn_dim: 256              # Reduced from 448 for 6GB GPU memory constraints
   n_class: 29  # Will be updated dynamically based on TextTransform vocabulary size
   n_feats: 128
   stride: 2
@@ -14,16 +14,16 @@ model:
   use_transformer: false
   use_se: true              # Enable squeeze-and-excitation
   use_chunked_attention: true  # Use memory-efficient chunked attention
-  attention_chunk_size: 512     # Chunk size for attention (reduces memory)
-  attention_overlap: 64         # Overlap between chunks
+  attention_chunk_size: 256     # Reduced chunk size for memory efficiency
+  attention_overlap: 32         # Reduced overlap for memory efficiency
 
 # Training parameters
 training:
-  batch_size: 4             # Reduced from 10 for 6GB GPU
+  batch_size: 2             # Reduced to 2 for 6GB GPU memory constraints
   epochs: 10                # Increased for better training (can stop early)
   learning_rate: 0.0005
   weight_decay: 0.00001
-  gradient_accumulation_steps: 4  # Increased to maintain effective batch size of 16
+  gradient_accumulation_steps: 8  # Increased to maintain effective batch size of 16
   max_grad_norm: 1.0
   use_amp: true
   num_workers: 4
@@ -46,7 +46,7 @@ data:
   # Custom dataset paths (used when dataset_type is "custom")
   audio_files_dir: "dataset/audio_files"
   transcripts_dir: "dataset/info"
-  test_audio_dir: "test_audio"  # Separate test set directory
+  test_audio_dir: "dataset/test_audio"  # Separate test set directory
   train_split: 0.8  # 80% train, 20% validation
   include_persian: true  # Enable Persian character support
   # Audio processing
