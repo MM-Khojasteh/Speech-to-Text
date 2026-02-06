@@ -21,8 +21,8 @@ model:
 training:
   batch_size: 1             # Reduced to 2 for 6GB GPU memory constraints
   epochs: 5                # Increased for better training (can stop early)
-  learning_rate: 0.0001
-  weight_decay: 0.00001
+  learning_rate: 0.00005     # Reduced to prevent blank token bias
+  weight_decay: 0.0001      # Increased to prevent overfitting
   gradient_accumulation_steps: 4  # Increased to maintain effective batch size of 16
   max_grad_norm: 1.0
   use_amp: true

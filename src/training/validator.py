@@ -77,15 +77,38 @@ class Validator:
                 
                 # Forward pass
                 output = self.model(spectrograms)
-                output = torch.nn.functional.log_softmax(output, dim=2)
-                output = output.transpose(0, 1)  # CTC expects (time, batch, classes)
+                output_log_probs = torch.nn.functional.log_softmax(output, dim=2)
+                output_for_loss = output_log_probs.transpose(0, 1)  # CTC expects (time, batch, classes)
                 
                 # Calculate loss
-                loss = criterion(output, labels, input_lengths, label_lengths)
+                loss = criterion(output_for_loss, labels, input_lengths, label_lengths)
                 total_loss += loss.item()
                 
                 # Decode predictions
-                output_for_decoding = output.transpose(0, 1)  # Back to (batch, time, classes)
+                # Greedy decoder uses max, so log probabilities work fine (max is same on log or regular probs)
+                output_for_decoding = output_log_probs.transpose(0, 1)  # (time, batch, classes) -> transpose to (batch, time, classes)
+                output_for_decoding = output_for_decoding.transpose(0, 1)  # Back to (batch, time, classes)
+                
+                # Debug: Check what the model is predicting (only for first batch, first sample)
+                if batch_idx == 0 and verbose:
+                    # Get the most likely class at each time step for first sample
+                    max_probs, max_indices = torch.max(output_for_decoding[0], dim=1)  # (time, classes) -> max over classes
+                    blank_count = (max_indices == self.text_transform.blank_id).sum().item()
+                    total_timesteps = max_indices.shape[0]
+                    blank_percentage = 100.0 * blank_count / total_timesteps
+                    print(f"\n  Debug (first sample): {blank_count}/{total_timesteps} ({blank_percentage:.1f}%) timesteps predict blank (blank_id={self.text_transform.blank_id})")
+                    # Show top 5 predicted classes
+                    unique_preds, counts = torch.unique(max_indices, return_counts=True)
+                    top_preds = sorted(zip(counts.tolist(), unique_preds.tolist()), reverse=True)[:5]
+                    print(f"    Top predicted classes: {[(count, idx, f'{100.0*count/total_timesteps:.1f}%') for count, idx in top_preds]}")
+                    # Show average probability of blank vs non-blank
+                    probs = torch.exp(output_for_decoding[0])  # Convert to probabilities
+                    blank_probs = probs[:, self.text_transform.blank_id]
+                    avg_blank_prob = blank_probs.mean().item()
+                    non_blank_probs = probs[:, :self.text_transform.blank_id].max(dim=1)[0]
+                    avg_non_blank_prob = non_blank_probs.mean().item()
+                    print(f"    Avg blank prob: {avg_blank_prob:.4f}, Avg max non-blank prob: {avg_non_blank_prob:.4f}")
+                
                 decoded_outputs = greedy_decoder(output_for_decoding, blank_label=self.text_transform.blank_id)
                 
                 # Convert to text

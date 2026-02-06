@@ -206,8 +206,12 @@ def main():
     # Create scheduler
     scheduler = create_scheduler(optimizer, config, train_loader)
     
-    # Create criterion
-    criterion = nn.CTCLoss(blank=text_transform.blank_id).to(device)
+    # Create criterion with blank penalty to prevent blank token bias
+    from src.training.ctc_loss_with_penalty import CTCLossWithBlankPenalty
+    criterion = CTCLossWithBlankPenalty(
+        blank=text_transform.blank_id,
+        blank_penalty_weight=0.1  # Penalty weight for blank token predictions
+    ).to(device)
     
     # Create trainer
     trainer = Trainer(

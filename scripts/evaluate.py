@@ -162,7 +162,7 @@ def main():
     print(f"Loading checkpoint: {args.checkpoint}")
     load_checkpoint(args.checkpoint, model, device=device)
     
-    # Create criterion
+    # Create criterion (use standard CTC for evaluation, no penalty needed)
     criterion = nn.CTCLoss(blank=text_transform.blank_id).to(device)
     
     # Create validator
