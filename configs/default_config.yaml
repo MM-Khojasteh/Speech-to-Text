@@ -21,7 +21,8 @@ model:
 training:
   batch_size: 1             # Reduced to 2 for 6GB GPU memory constraints
   epochs: 5                # Increased for better training (can stop early)
-  learning_rate: 0.00005     # Reduced to prevent blank token bias
+  learning_rate: 0.00005     # Base learning rate (also used as min_lr for schedulers)
+  max_lr: 0.0005             # Maximum LR for OneCycleLR (5-10x learning_rate)
   weight_decay: 0.0001      # Increased to prevent overfitting
   gradient_accumulation_steps: 4  # Increased to maintain effective batch size of 16
   max_grad_norm: 1.0
@@ -30,7 +31,8 @@ training:
   pin_memory: true
   validate_every: 2
   save_every: 3             # Save more frequently
-  early_stopping_patience: 2  # Stop if no improvement for 3 epochs
+  early_stopping_patience: 10  # Stop if no improvement for 10 validations (more patient for CTC)
+  warmup_steps: 500            # Linear LR warmup steps (stabilizes early CTC training)
   scheduler_type: "onecycle"
   scheduler_params:
     anneal_strategy: "linear"

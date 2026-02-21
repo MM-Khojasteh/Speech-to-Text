@@ -36,11 +36,12 @@ class Trainer:
         checkpoint_dir: str = "checkpoints",
         log_dir: str = "logs",
         save_best: bool = True,
-        early_stopping_patience: Optional[int] = None
+        early_stopping_patience: Optional[int] = None,
+        warmup_steps: int = 0
     ):
         """
         Initialize trainer.
-        
+
         Args:
             model: Speech recognition model
             train_loader: Training data loader
@@ -57,6 +58,7 @@ class Trainer:
             log_dir: Directory for TensorBoard logs
             save_best: Whether to save best model based on validation loss
             early_stopping_patience: Number of epochs to wait before early stopping
+            warmup_steps: Number of warmup steps for linear LR warmup (0 to disable)
         """
         self.model = model
         self.train_loader = train_loader
@@ -73,7 +75,12 @@ class Trainer:
         self.log_dir = log_dir
         self.save_best = save_best
         self.early_stopping_patience = early_stopping_patience
-        
+        self.warmup_steps = warmup_steps
+        self.global_step = 0
+
+        # Store base learning rates for warmup
+        self.base_lrs = [group['lr'] for group in self.optimizer.param_groups]
+
         # AMP scaler (using new API for PyTorch 2.0+)
         self.scaler = GradScaler('cuda') if use_amp else None
         
@@ -101,6 +108,20 @@ class Trainer:
         except ImportError:
             print("TensorBoard not available. Install with: pip install tensorboard")
     
+    def _apply_warmup(self, step: int):
+        """Apply linear learning rate warmup.
+
+        Args:
+            step: Current global step (0-indexed)
+        """
+        if self.warmup_steps <= 0 or step >= self.warmup_steps:
+            return
+
+        # Linear warmup: scale LR from 0 to base_lr
+        warmup_factor = (step + 1) / self.warmup_steps
+        for group, base_lr in zip(self.optimizer.param_groups, self.base_lrs):
+            group['lr'] = base_lr * warmup_factor
+
     def train_epoch(self, epoch: int) -> Dict[str, float]:
         """
         Train for one epoch.
@@ -174,10 +195,15 @@ class Trainer:
                     )
                     self.optimizer.step()
                 
-                # Update learning rate (must be after optimizer.step())
-                if self.scheduler is not None:
+                # Update global step and apply warmup/main scheduler
+                self.global_step += 1
+                if self.warmup_steps > 0 and self.global_step <= self.warmup_steps:
+                    # In warmup phase: apply linear warmup
+                    self._apply_warmup(self.global_step - 1)  # 0-indexed step
+                elif self.scheduler is not None:
+                    # After warmup: use main scheduler
                     self.scheduler.step()
-                
+
                 self.optimizer.zero_grad()
                 
                 # Clear cache periodically to help with memory management

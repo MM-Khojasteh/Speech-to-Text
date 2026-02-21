@@ -14,10 +14,13 @@ A production-ready, modular implementation of speech recognition using PyTorch w
 - **Automatic Mixed Precision (AMP)**: Faster training with reduced memory usage
 - **Gradient Accumulation**: Support for effective larger batch sizes
 - **Advanced Optimizers**: AdamW with proper weight decay
-- **Learning Rate Scheduling**: OneCycle, Cosine, or Step schedulers
+- **Learning Rate Scheduling**: OneCycle, Cosine, or Step schedulers (with proper max_lr configuration)
+- **LR Warmup**: Linear warmup for stable early CTC training
 - **Model Checkpointing**: Save best model and periodic checkpoints
-- **Early Stopping**: Prevent overfitting
+- **Early Stopping**: Patient early stopping (10 validation periods) to prevent overfitting
 - **TensorBoard Logging**: Track metrics, losses, and learning rates
+- **Cached Transforms**: Optimized data loading (no per-batch transform recreation)
+- **Vectorized Blank Penalty**: GPU-parallelized CTC blank penalty computation
 
 ### Data Processing
 - **SpecAugment**: Time and frequency masking for data augmentation

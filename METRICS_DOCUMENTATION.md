@@ -131,8 +131,16 @@ print(f"SER: {batch_metrics['ser']:.4f}")
 
 ## Notes
 
-- All metrics handle empty references/hypotheses gracefully
+- **Empty Predictions**: Models producing empty predictions are penalized with 100% WER/CER for those samples
+- **Empty References**: Samples with empty references are excluded from metrics (data quality issue, not model issue)
 - Metrics can be case-sensitive or case-insensitive (configurable)
 - Persian and English characters are fully supported
 - Metrics are calculated efficiently using optimized algorithms
+
+### Empty Prediction Handling
+
+During validation and evaluation, if the model produces an empty prediction for a non-empty reference:
+- The sample is counted as **100% error** (WER=1.0, CER=1.0, all accuracies=0)
+- This ensures metrics reflect actual model performance, not just "easy" samples
+- Prevents overly optimistic metrics when model collapses to blank predictions
 

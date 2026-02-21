@@ -91,11 +91,13 @@ try:
     print("Running model inference...")
     model.eval()
     with torch.no_grad():
-        output = model(spec)
+        output = model(spec)  # (time, batch, classes)
         output = torch.nn.functional.log_softmax(output, dim=2)
-    
+        # Transpose to (batch, time, classes) for decoder
+        output = output.transpose(0, 1)
+
     print(f"Model output shape: {output.shape}")
-    
+
     # Decode
     decoded_output = greedy_decoder(output, blank_label=text_transform.blank_id)
     predicted_text = text_transform.int_to_text(decoded_output[0]) if decoded_output else ""

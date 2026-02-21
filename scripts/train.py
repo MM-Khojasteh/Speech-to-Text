@@ -49,9 +49,11 @@ def create_scheduler(optimizer: optim.Optimizer, config, train_loader) -> optim.
     scheduler_params = config.training.scheduler_params
     
     if scheduler_type == "onecycle":
+        # Use max_lr if specified, otherwise default to 10x learning_rate
+        max_lr = getattr(config.training, 'max_lr', config.training.learning_rate * 10)
         return optim.lr_scheduler.OneCycleLR(
             optimizer,
-            max_lr=config.training.learning_rate,
+            max_lr=max_lr,
             steps_per_epoch=len(train_loader),
             epochs=config.training.epochs,
             **scheduler_params
@@ -229,7 +231,8 @@ def main():
         checkpoint_dir=config.checkpoint_dir,
         log_dir=config.log_dir,
         save_best=True,
-        early_stopping_patience=config.training.early_stopping_patience
+        early_stopping_patience=config.training.early_stopping_patience,
+        warmup_steps=getattr(config.training, 'warmup_steps', 0)
     )
     
     # Resume from checkpoint if specified

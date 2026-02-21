@@ -2,6 +2,8 @@
 
 An independent technical review of the project architecture, identifying strengths, weaknesses, and potential improvements -- all within the constraint of the current GPU budget (6 GB VRAM, single GPU).
 
+> **Update (2026-02-21):** All identified weaknesses have been addressed. See Section 7 for fix details.
+
 ---
 
 ## 1. High-Level Summary
@@ -209,4 +211,35 @@ These improvements require zero additional GPU memory:
 
 ---
 
+## 7. Fixes Applied (2026-02-21)
+
+All identified weaknesses have been addressed:
+
+| Issue | Fix | File(s) Modified |
+|-------|-----|------------------|
+| **3.1 Transform recreation per batch** | Transforms now cached in `CollateFn.__init__` | `src/data/dataset.py` |
+| **3.2 No GRU residual connections** | Added residual connections with projection layer when dims differ | `src/models/rnn_blocks.py` |
+| **3.4 Blank penalty not vectorized** | Replaced Python loop with vectorized tensor operations | `src/training/ctc_loss_with_penalty.py` |
+| **3.6 OneCycleLR max_lr** | Added `max_lr` config parameter (10x learning rate) | `configs/default_config.yaml`, `scripts/train.py` |
+| **3.8 Hardcoded stride** | Added configurable `stride` parameter to data pipeline | `src/data/dataset.py` |
+| **3.9 Chunked attention length mismatch** | Proper padding/trimming to ensure exact length match | `src/models/rnn_blocks.py` |
+| **3.10 No LR warmup** | Added linear LR warmup over first N steps (default: 500) | `src/training/trainer.py`, `configs/default_config.yaml`, `scripts/train.py` |
+| **3.11 Empty predictions excluded from WER** | Empty predictions now counted as 100% WER | `src/training/validator.py` |
+| **3.12 Aggressive early stopping** | Increased patience from 2 to 10 epochs | `configs/default_config.yaml` |
+| **3.13 Greedy decoder shape heuristic** | Removed fragile heuristic; decoder requires explicit (batch, time, classes) shape | `src/inference/decoder.py`, `src/training/validator.py`, `scripts/inference.py`, `test_gpu_and_run.py` |
+| **3.15 Debug counter initialization** | Moved `_debug_counter` to proper `__init__` initialization | `src/training/ctc_loss_with_penalty.py` |
+
+### Notable Improvements
+
+1. **Performance**: Transform caching eliminates CPU bottleneck from repeated `MelSpectrogram` construction.
+
+2. **Training Stability**: LR warmup + proper OneCycleLR configuration + patient early stopping = more stable CTC training.
+
+3. **Accuracy**: GRU residual connections enable deeper stacks; fixed WER calculation gives honest metrics.
+
+4. **Robustness**: Configurable stride prevents silent failures; proper length handling in chunked attention.
+
+---
+
 *Review conducted on 2026-02-07 against commit `beab70f`.*
+*Fixes applied on 2026-02-21.*

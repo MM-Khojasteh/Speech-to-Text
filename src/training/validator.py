@@ -86,8 +86,8 @@ class Validator:
                 
                 # Decode predictions
                 # Greedy decoder uses max, so log probabilities work fine (max is same on log or regular probs)
-                output_for_decoding = output_log_probs.transpose(0, 1)  # (time, batch, classes) -> transpose to (batch, time, classes)
-                output_for_decoding = output_for_decoding.transpose(0, 1)  # Back to (batch, time, classes)
+                # Transpose from (time, batch, classes) to (batch, time, classes) for decoder
+                output_for_decoding = output_log_probs.transpose(0, 1)  # (batch, time, classes)
                 
                 # Debug: Check what the model is predicting (only for first batch, first sample)
                 if batch_idx == 0 and verbose:
@@ -165,13 +165,27 @@ class Validator:
         non_empty_refs = total_pairs - empty_refs
         non_empty_hyps = total_pairs - empty_hyps
         
-        # Filter out empty references/hypotheses for metric calculation
-        valid_pairs = [
-            (ref, hyp) for ref, hyp in zip(all_true_texts, all_predicted_texts)
-            if isinstance(ref, str) and isinstance(hyp, str) and ref.strip() and hyp.strip()
-        ]
-        
-        if len(valid_pairs) == 0:
+        # Include all pairs for metric calculation, counting empty predictions as 100% WER
+        # Empty references are still excluded (data quality issue, not model issue)
+        valid_pairs = []
+        empty_pred_wer_sum = 0.0
+        empty_pred_cer_sum = 0.0
+        empty_pred_count = 0
+
+        for ref, hyp in zip(all_true_texts, all_predicted_texts):
+            if not isinstance(ref, str) or not ref.strip():
+                # Skip empty references (data quality issue)
+                continue
+            if isinstance(hyp, str) and hyp.strip():
+                # Normal case: both non-empty
+                valid_pairs.append((ref, hyp))
+            else:
+                # Empty prediction: count as 100% error for this sample
+                empty_pred_wer_sum += 1.0  # WER = 1.0 (100%)
+                empty_pred_cer_sum += 1.0  # CER = 1.0 (100%)
+                empty_pred_count += 1
+
+        if len(valid_pairs) == 0 and empty_pred_count == 0:
             metrics = {
                 'loss': avg_loss,
                 'wer': float('inf'),
@@ -209,15 +223,57 @@ class Validator:
                         print(f"    {i}. {ref_display}")
             return metrics
         
-        valid_refs, valid_hyps = zip(*valid_pairs)
-        
-        # Calculate comprehensive metrics
-        batch_metrics = calculate_batch_metrics(
-            list(valid_refs),
-            list(valid_hyps),
-            ignore_case=False
-        )
-        
+        total_evaluated = len(valid_pairs) + empty_pred_count
+
+        if len(valid_pairs) > 0:
+            valid_refs, valid_hyps = zip(*valid_pairs)
+
+            # Calculate comprehensive metrics on non-empty predictions
+            batch_metrics = calculate_batch_metrics(
+                list(valid_refs),
+                list(valid_hyps),
+                ignore_case=False
+            )
+
+            # Blend with empty prediction penalties (100% error)
+            if empty_pred_count > 0:
+                valid_weight = len(valid_pairs) / total_evaluated
+                empty_weight = empty_pred_count / total_evaluated
+
+                # Weighted average for rates (lower is better)
+                batch_metrics['wer'] = batch_metrics.get('wer', 0.0) * valid_weight + 1.0 * empty_weight
+                batch_metrics['cer'] = batch_metrics.get('cer', 0.0) * valid_weight + 1.0 * empty_weight
+                batch_metrics['ser'] = batch_metrics.get('ser', 0.0) * valid_weight + 1.0 * empty_weight
+
+                # Weighted average for accuracy (higher is better, so we penalty by scaling down)
+                batch_metrics['word_accuracy'] = batch_metrics.get('word_accuracy', 0.0) * valid_weight + 0.0 * empty_weight
+                batch_metrics['character_accuracy'] = batch_metrics.get('character_accuracy', 0.0) * valid_weight + 0.0 * empty_weight
+                batch_metrics['exact_match_rate'] = batch_metrics.get('exact_match_rate', 0.0) * valid_weight + 0.0 * empty_weight
+
+                # Other metrics get weighted similarly
+                for key in ['bleu', 'rouge_l', 'word_precision', 'word_recall', 'word_f1',
+                           'char_precision', 'char_recall', 'char_f1']:
+                    if key in batch_metrics:
+                        batch_metrics[key] = batch_metrics[key] * valid_weight + 0.0 * empty_weight
+        else:
+            # All predictions were empty
+            batch_metrics = {
+                'wer': 1.0,
+                'cer': 1.0,
+                'ser': 1.0,
+                'word_accuracy': 0.0,
+                'character_accuracy': 0.0,
+                'exact_match_rate': 0.0,
+                'bleu': 0.0,
+                'rouge_l': 0.0,
+                'word_precision': 0.0,
+                'word_recall': 0.0,
+                'word_f1': 0.0,
+                'char_precision': 0.0,
+                'char_recall': 0.0,
+                'char_f1': 0.0
+            }
+
         # Combine with loss
         metrics = {
             'loss': avg_loss,
@@ -232,6 +288,8 @@ class Validator:
             print(f"    Empty references: {empty_refs} ({100*empty_refs/max(total_pairs,1):.1f}%)")
             print(f"    Empty predictions: {empty_hyps} ({100*empty_hyps/max(total_pairs,1):.1f}%)")
             print(f"    Valid pairs (both non-empty): {len(valid_pairs)} ({100*len(valid_pairs)/max(total_pairs,1):.1f}%)")
+            if empty_pred_count > 0:
+                print(f"    Note: {empty_pred_count} empty predictions counted as 100% WER/CER")
             
             # Show sample predictions
             if sample_pairs:

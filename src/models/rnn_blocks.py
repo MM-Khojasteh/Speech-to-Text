@@ -190,17 +190,23 @@ class ChunkedMultiHeadSelfAttention(nn.Module):
                     )
             
             output_chunks.append(chunk_output)
-        
+
         # Concatenate all chunks
         output = torch.cat(output_chunks, dim=1)
-        
-        # Ensure output matches residual size (handle any size mismatch)
+
+        # Ensure output matches residual size exactly
         if output.shape[1] != residual.shape[1]:
-            # Trim or pad to match
-            min_len = min(output.shape[1], residual.shape[1])
-            output = output[:, :min_len, :]
-            residual = residual[:, :min_len, :]
-        
+            if output.shape[1] > residual.shape[1]:
+                # Trim excess (due to overlap at the end)
+                output = output[:, :residual.shape[1], :]
+            else:
+                # This shouldn't happen, but pad if needed
+                padding = torch.zeros(
+                    output.shape[0], residual.shape[1] - output.shape[1], output.shape[2],
+                    device=output.device, dtype=output.dtype
+                )
+                output = torch.cat([output, padding], dim=1)
+
         # Residual connection
         return output + residual
     
@@ -246,9 +252,11 @@ class ChunkedMultiHeadSelfAttention(nn.Module):
 
 class BidirectionalGRU(nn.Module):
     """
-    Bidirectional GRU with layer normalization and dropout.
+    Bidirectional GRU with layer normalization, residual connection, and dropout.
+
+    Uses a projection layer for the residual if input dim != output dim (hidden_size * 2).
     """
-    
+
     def __init__(
         self,
         rnn_dim: int,
@@ -258,7 +266,7 @@ class BidirectionalGRU(nn.Module):
     ):
         """
         Initialize bidirectional GRU.
-        
+
         Args:
             rnn_dim: Input dimension
             hidden_size: Hidden state size
@@ -266,7 +274,7 @@ class BidirectionalGRU(nn.Module):
             batch_first: If True, input/output is (batch, seq, features)
         """
         super(BidirectionalGRU, self).__init__()
-        
+
         self.BiGRU = nn.GRU(
             input_size=rnn_dim,
             hidden_size=hidden_size,
@@ -276,22 +284,36 @@ class BidirectionalGRU(nn.Module):
         )
         self.layer_norm = nn.LayerNorm(rnn_dim)
         self.dropout = nn.Dropout(dropout)
-    
+
+        # Residual projection if dimensions don't match
+        output_dim = hidden_size * 2
+        self.use_projection = rnn_dim != output_dim
+        if self.use_projection:
+            self.residual_proj = nn.Linear(rnn_dim, output_dim)
+        else:
+            self.residual_proj = None
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass through bidirectional GRU.
-        
+        Forward pass through bidirectional GRU with residual connection.
+
         Args:
             x: Input tensor of shape (batch, seq_len, rnn_dim)
-            
+
         Returns:
-            Output tensor of shape (batch, seq_len, rnn_dim * 2)
+            Output tensor of shape (batch, seq_len, hidden_size * 2)
         """
+        residual = x
+
         x = self.layer_norm(x)
         x = F.gelu(x)
         x, _ = self.BiGRU(x)
         x = self.dropout(x)
-        return x
+
+        # Add residual connection
+        if self.use_projection:
+            residual = self.residual_proj(residual)
+        return x + residual
 
 
 class TransformerEncoderLayer(nn.Module):

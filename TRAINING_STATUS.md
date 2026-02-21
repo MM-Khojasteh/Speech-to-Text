@@ -69,13 +69,15 @@ Epoch 1/10
 
 ## Training Configuration
 
-- **Epochs**: 10 (with early stopping after 3 epochs without improvement)
+- **Epochs**: 10 (with patient early stopping after 10 validations without improvement)
 - **Batch Size**: 4
 - **Effective Batch Size**: 16 (with gradient accumulation)
-- **Learning Rate**: 0.0005
+- **Learning Rate**: 0.00005 (base), 0.0005 (max for OneCycleLR)
+- **LR Warmup**: 500 steps (linear warmup for stable early training)
 - **Optimizer**: AdamW
-- **Scheduler**: OneCycleLR
-- **Early Stopping**: Enabled (patience: 3)
+- **Scheduler**: OneCycleLR (proper max_lr configuration)
+- **Early Stopping**: Enabled (patience: 10 validations)
+- **Cached Transforms**: Enabled (eliminated per-batch CPU bottleneck)
 
 ## Checkpoints
 

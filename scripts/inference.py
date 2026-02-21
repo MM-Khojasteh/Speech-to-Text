@@ -95,9 +95,12 @@ def speech_to_text_chunked(
             spec = spec.to(device)
             
             # Run model inference
-            output = model(spec)
+            output = model(spec)  # (time, batch, classes)
             output = torch.nn.functional.log_softmax(output, dim=2)
-            
+
+            # Transpose to (batch, time, classes) for decoder
+            output = output.transpose(0, 1)
+
             # Decode output
             decoded_output = greedy_decoder(output, blank_label=text_transform.blank_id)
             if decoded_output and len(decoded_output) > 0:
@@ -178,9 +181,11 @@ def speech_to_text(
     # Run model inference
     model.eval()
     with torch.no_grad():
-        output = model(spec)
+        output = model(spec)  # (time, batch, classes)
         output = torch.nn.functional.log_softmax(output, dim=2)
-    
+        # Transpose to (batch, time, classes) for decoder
+        output = output.transpose(0, 1)
+
     # Decode output
     decoded_output = greedy_decoder(output, blank_label=text_transform.blank_id)
     

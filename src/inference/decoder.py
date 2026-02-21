@@ -16,24 +16,22 @@ def greedy_decoder(
     Greedy decoder for CTC outputs.
     Decodes the output probabilities to the most likely indices sequence,
     removing blanks and consecutive duplicates.
-    
+
     Args:
-        output_probs: Output probabilities/logits of shape (batch, time, n_classes)
-                      or (time, batch, n_classes) for CTC
+        output_probs: Output log probabilities of shape (batch, time, n_classes).
+                      The caller is responsible for providing tensor in correct layout.
         blank_label: Index of the blank token (default: 0, but should be passed from text_transform.blank_id)
-        
+
     Returns:
         List of decoded sequences (list of integer lists)
     """
-    # Handle different input shapes
-    if output_probs.dim() == 3:
-        if output_probs.size(0) < output_probs.size(1):
-            # Assume (time, batch, classes) - transpose to (batch, time, classes)
-            output_probs = output_probs.transpose(0, 1)
-        # Now shape is (batch, time, classes)
-        max_probs, indices = torch.max(output_probs, dim=2)
-    else:
-        raise ValueError(f"Expected 3D tensor, got {output_probs.dim()}D")
+    # Validate input shape - require (batch, time, classes)
+    if output_probs.dim() != 3:
+        raise ValueError(f"Expected 3D tensor (batch, time, classes), got {output_probs.dim()}D")
+
+    # Get max probabilities along class dimension
+    # Shape: (batch, time)
+    max_probs, indices = torch.max(output_probs, dim=2)
     
     decoded_batches = []
     

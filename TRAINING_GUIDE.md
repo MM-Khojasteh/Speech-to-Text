@@ -14,12 +14,21 @@ The output you're seeing ("rerg rer", "ekrkrerzrezrzeg") is **completely expecte
 
 I've enhanced the architecture to improve accuracy while staying within your 6GB GPU:
 
-### Improvements:
+### Model Architecture Improvements:
 - ✅ **More CNN Layers**: 3 → 4 (better feature extraction)
 - ✅ **More RNN Layers**: 5 → 6 (better sequence modeling)
 - ✅ **Larger RNN Dimension**: 384 → 448 (more capacity)
 - ✅ **Deeper Classifier**: 2-layer → 3-layer with normalization
+- ✅ **GRU Residual Connections**: Better gradient flow for deeper stacks
 - ✅ **All Features Enabled**: Attention, SE, Residual blocks
+
+### Training Improvements (2026-02-21):
+- ✅ **LR Warmup**: Linear warmup over first 500 steps prevents early CTC collapse
+- ✅ **Fixed OneCycleLR**: Proper max_lr (10x base) for effective learning rate schedule
+- ✅ **Patient Early Stopping**: Increased patience from 2 to 10 validations
+- ✅ **Accurate Metrics**: Empty predictions now count as 100% WER (not excluded)
+- ✅ **Cached Transforms**: Eliminated CPU bottleneck in data loading
+- ✅ **Vectorized Blank Penalty**: GPU-parallelized penalty computation
 
 ### Model Stats:
 - **Parameters**: 22.8M (increased from 14.1M)
@@ -156,7 +165,8 @@ python scripts/inference.py --audio test_audio/test_file_1.wav --checkpoint chec
 1. **Start Small**: Train for 1-2 epochs first to verify everything works
 2. **Monitor Memory**: Watch GPU memory usage (should stay <4GB)
 3. **Check Loss**: Loss should decrease steadily
-4. **Early Stopping**: Configured to stop if no improvement for 3 epochs
+4. **Early Stopping**: Configured to stop if no improvement for 10 validations (patient mode)
+5. **LR Warmup**: Linear warmup over first 500 steps stabilizes early training
 5. **Resume Training**: If interrupted, resume with:
    ```bash
    python scripts/train.py --config configs/default_config.yaml --resume checkpoints/checkpoint_epoch_X.pth
