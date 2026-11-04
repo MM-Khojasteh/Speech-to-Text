@@ -70,7 +70,3 @@ Waveform → MelSpectrogram → Residual CNN (+SE) → Chunked MHSA → BiGRU �
 ## Metrics
 
 Validation and evaluation report WER, CER, SER, word/character accuracy, exact match, BLEU, ROUGE-L, and word/character precision/recall/F1.
-
-## License
-
-[Specify your license here]
