@@ -208,11 +208,17 @@ def main():
     # Create scheduler
     scheduler = create_scheduler(optimizer, config, train_loader)
     
-    # Create criterion with blank penalty to prevent blank token bias
+    # Create criterion with tiered blank penalty to prevent blank token bias.
+    # The penalty weight and tier matrix belong to the private configuration
+    # matrix and are read from the environment (see .env.example).
     from src.training.ctc_loss_with_penalty import CTCLossWithBlankPenalty
+    from src.utils.env import load_env_file, parse_penalty_tiers, require_env
+
+    load_env_file()
     criterion = CTCLossWithBlankPenalty(
         blank=text_transform.blank_id,
-        blank_penalty_weight=30.0  # Very strong penalty weight to prevent blank bias
+        blank_penalty_weight=require_env("STT_BLANK_PENALTY_WEIGHT", float),
+        tier_config=parse_penalty_tiers(require_env("STT_BLANK_PENALTY_TIERS", str))
     ).to(device)
     
     # Create trainer

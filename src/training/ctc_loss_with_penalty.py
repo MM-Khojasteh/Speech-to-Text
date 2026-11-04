@@ -1,10 +1,23 @@
 """
 CTC Loss with blank token penalty to prevent blank token bias.
+
+The penalty uses a tiered adaptive schedule: for each sample, the highest
+tier whose threshold is exceeded by the average blank probability supplies
+``probability ** exponent * multiplier``. The tuned tier matrix is part of
+the project's private configuration matrix and is injected through the
+environment (STT_BLANK_PENALTY_WEIGHT / STT_BLANK_PENALTY_TIERS, see
+.env.example); the in-code default below is a deliberately conservative
+single-tier profile.
 """
+
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+
+# Conservative public fallback: a single soft tier. The tuned escalating
+# matrix is supplied via environment configuration (see .env.example).
+DEFAULT_TIER_CONFIG: List[Tuple[float, float, float]] = [(0.0, 1.0, 1.0)]
 
 
 class CTCLossWithBlankPenalty(nn.Module):
@@ -12,13 +25,14 @@ class CTCLossWithBlankPenalty(nn.Module):
     CTC Loss wrapper that adds penalty for excessive blank token predictions.
     This helps prevent the model from learning to predict only blank tokens.
     """
-    
+
     def __init__(
         self,
         blank: int,
         blank_penalty_weight: float = 0.1,
         reduction: str = 'mean',
-        zero_infinity: bool = False
+        zero_infinity: bool = False,
+        tier_config: Optional[List[Tuple[float, float, float]]] = None
     ):
         """
         Initialize CTC Loss with blank penalty.
@@ -28,6 +42,13 @@ class CTCLossWithBlankPenalty(nn.Module):
             blank_penalty_weight: Weight for blank penalty (0.0 = no penalty, higher = more penalty)
             reduction: Reduction method ('mean', 'sum', or 'none')
             zero_infinity: Whether to zero infinite losses
+            tier_config: Penalty tier matrix as an ascending list of
+                (threshold, exponent, multiplier) tuples. For each sample,
+                the highest tier whose threshold is exceeded by the average
+                blank probability supplies
+                ``(probability ** exponent) * multiplier``. Defaults to a
+                conservative single-tier profile; the tuned matrix is
+                provided through environment configuration.
         """
         super().__init__()
         self.ctc_loss = nn.CTCLoss(
@@ -37,6 +58,17 @@ class CTCLossWithBlankPenalty(nn.Module):
         )
         self.blank = blank
         self.blank_penalty_weight = blank_penalty_weight
+
+        tiers = list(tier_config) if tier_config is not None else list(DEFAULT_TIER_CONFIG)
+        if not tiers:
+            raise ValueError("tier_config must contain at least one tier")
+        for lower, upper in zip(tiers, tiers[1:]):
+            if upper[0] <= lower[0]:
+                raise ValueError(
+                    "tier_config thresholds must be strictly ascending: "
+                    f"{tiers!r}"
+                )
+        self.tier_config = tiers
         self._debug_counter = 0
     
     def forward(
@@ -83,38 +115,18 @@ class CTCLossWithBlankPenalty(nn.Module):
             masked_blank_probs = blank_probs * mask.float()
             avg_blank_probs = masked_blank_probs.sum(dim=0) / lengths.clamp(min=1).float()  # (N,)
 
-            # Vectorized adaptive penalty calculation
-            # Define penalty multipliers and exponents for different probability ranges
-            # Penalty = (prob ^ exp) * weight * multiplier
+            # Vectorized adaptive penalty calculation.
+            # The tier matrix is a list of (threshold, exponent, multiplier)
+            # tuples with ascending thresholds; iterating in ascending order
+            # means the highest tier exceeded by the average blank probability
+            # determines the penalty: (prob ** exponent) * multiplier.
             penalties = torch.zeros_like(avg_blank_probs)
-
-            # Very high blank prob (>80%): prob^4 * 20x
-            mask_vhigh = avg_blank_probs > 0.8
-            penalties = torch.where(mask_vhigh, (avg_blank_probs ** 4) * 20.0, penalties)
-
-            # High blank prob (60-80%): prob^4 * 15x
-            mask_high = (avg_blank_probs > 0.6) & ~mask_vhigh
-            penalties = torch.where(mask_high, (avg_blank_probs ** 4) * 15.0, penalties)
-
-            # Moderate-high blank prob (40-60%): prob^3 * 10x
-            mask_mhigh = (avg_blank_probs > 0.4) & ~mask_high & ~mask_vhigh
-            penalties = torch.where(mask_mhigh, (avg_blank_probs ** 3) * 10.0, penalties)
-
-            # Moderate blank prob (20-40%): prob^2 * 8x
-            mask_mod = (avg_blank_probs > 0.2) & ~mask_mhigh & ~mask_high & ~mask_vhigh
-            penalties = torch.where(mask_mod, (avg_blank_probs ** 2) * 8.0, penalties)
-
-            # Low-moderate blank prob (10-20%): prob^2 * 5x
-            mask_lowmod = (avg_blank_probs > 0.1) & ~mask_mod & ~mask_mhigh & ~mask_high & ~mask_vhigh
-            penalties = torch.where(mask_lowmod, (avg_blank_probs ** 2) * 5.0, penalties)
-
-            # Low blank prob (5-10%): prob^2 * 2x
-            mask_low = (avg_blank_probs > 0.05) & ~mask_lowmod & ~mask_mod & ~mask_mhigh & ~mask_high & ~mask_vhigh
-            penalties = torch.where(mask_low, (avg_blank_probs ** 2) * 2.0, penalties)
-
-            # Very low blank prob (<5%): prob * 0.2x
-            mask_vlow = ~mask_low & ~mask_lowmod & ~mask_mod & ~mask_mhigh & ~mask_high & ~mask_vhigh
-            penalties = torch.where(mask_vlow, avg_blank_probs * 0.2, penalties)
+            for threshold, exponent, multiplier in self.tier_config:
+                penalties = torch.where(
+                    avg_blank_probs > threshold,
+                    (avg_blank_probs ** exponent) * multiplier,
+                    penalties
+                )
 
             # Apply weight and compute mean across batch
             blank_penalty = (penalties * self.blank_penalty_weight).mean()

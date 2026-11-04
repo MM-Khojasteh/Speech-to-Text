@@ -1,0 +1,77 @@
+# =============================================================================
+# Speech-to-Text — Base configuration template (public example)
+# =============================================================================
+# Copy this file to configs/default_config.yaml before running:
+#
+#     cp configs/default_config.example.yaml configs/default_config.yaml
+#
+# This file defines the STRUCTURE of the base configuration only. The tuned
+# hyperparameters, the CTC blank-penalty tier matrix, and logic toggles are
+# NOT stored here: they are injected from STT_* environment variables after
+# this file is loaded (see .env.example). The values below are safe generic
+# placeholders, not the tuned configuration matrix.
+# =============================================================================
+
+# Model architecture (tuned values injected via STT_MODEL_* variables)
+model:
+  n_cnn_layers: 3
+  n_rnn_layers: 5
+  rnn_dim: 512
+  n_class: 29   # Updated dynamically from the TextTransform vocabulary
+  n_feats: 128
+  stride: 2
+  dropout: 0.1
+  use_attention: true
+  n_attention_heads: 8
+  use_transformer: false
+  use_se: false
+  use_chunked_attention: true
+  attention_chunk_size: 512
+  attention_overlap: 64
+
+# Training (tuned values injected via STT_TRAIN_* variables)
+training:
+  batch_size: 10
+  epochs: 1
+  learning_rate: 0.0005
+  max_lr: null          # Injected from STT_TRAIN_MAX_LR
+  weight_decay: 0.00001
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
+  use_amp: true
+  num_workers: 4
+  pin_memory: true
+  validate_every: 1
+  save_every: 10
+  early_stopping_patience: null
+  warmup_steps: 0       # Injected from STT_TRAIN_WARMUP_STEPS
+  scheduler_type: "onecycle"
+  scheduler_params: {}
+
+# Data (tuned values injected via STT_DATA_* variables)
+data:
+  dataset_type: "custom"  # "librispeech" or "custom"
+  # LibriSpeech paths (used when dataset_type is "librispeech")
+  train_root: "/kaggle/input/librispeech-clean"
+  test_root: "/kaggle/input/librispeech-clean"
+  train_url: "train-clean-100"
+  test_url: "test-clean"
+  # Custom dataset paths (used when dataset_type is "custom")
+  audio_files_dir: "dataset/audio_files"
+  transcripts_dir: "dataset/info"
+  test_audio_dir: "dataset/test_audio"
+  train_split: 0.8
+  include_persian: true
+  # Audio processing
+  sample_rate: 16000
+  n_mels: 128
+  freq_mask_param: 30
+  time_mask_param: 100
+  num_freq_masks: 2
+  num_time_masks: 2
+
+# General settings
+checkpoint_dir: "checkpoints"
+log_dir: "logs"
+device: "cuda"
+seed: 42

@@ -1,100 +1,251 @@
-# Byte-compiled / optimized / DLL files
+# =============================================================================
+# Speech-to-Text — Strict .gitignore (least-privilege / allowlist policy)
+# =============================================================================
+# Policy: ONLY source code, documentation, and explicitly approved public
+# configuration may be tracked. Everything else is ignored by default.
+# The allowlist FENCE at the bottom of this file enforces this: any new file
+# or directory at the repository root is ignored unless explicitly
+# re-included with a "!/..." line. New nested files inside approved
+# directories (src/, scripts/) are still filtered by the deny rules below.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# 1. SECRETS & CREDENTIALS  (kept at the very top on purpose — never commit)
+# -----------------------------------------------------------------------------
+# Environment / dotenv files — every variant, by extension AND by name.
+# NOTE: the "!.env.example" negation MUST stay AFTER "*.env.*" (a later
+# matching rule wins; "*.env.*" also matches ".env.example").
+.env
+.env.*
+*.env
+*.env.*
+!.env.example
+.envrc
+
+# Key / certificate material
+*.pem
+*.key
+*.key.pub
+*.crt
+*.cer
+*.pfx
+*.p12
+*.jks
+id_rsa*
+*.htpasswd
+*.netrc
+**/secrets*
+**/credentials*
+
+# Cloud / data-platform credential files (this project references Kaggle
+# dataset roots, so a downloaded kaggle.json API token is a realistic risk)
+kaggle.json
+/.kaggle/
+
+
+# -----------------------------------------------------------------------------
+# 2. Python — virtual environments & interpreters
+# -----------------------------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+.virtualenv/
+.python-version
+
+
+# -----------------------------------------------------------------------------
+# 3. Python — build artifacts, bytecode, caches, test/coverage output
+# -----------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
-.Python
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
 *.egg
-
-# PyInstaller
-*.manifest
-*.spec
-
-# Unit test / coverage reports
-htmlcov/
+*.egg-info/
+.eggs/
+.installed.cfg
+wheels/
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .tox/
 .nox/
+.hypothesis/
 .coverage
 .coverage.*
-.cache
-nosetests.xml
 coverage.xml
-*.cover
-.hypothesis/
-.pytest_cache/
-
-# Jupyter Notebook
+htmlcov/
+.cache/
 .ipynb_checkpoints/
-*/.ipynb_checkpoints/*
+*.spec
 
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+# Profiler output (cProfile / py-spy / scalene)
+*.prof
+*.profraw
 
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
 
-# Model files
-*.h5
-*.hdf5
-*.pkl
-*.pickle
+# -----------------------------------------------------------------------------
+# 4. ML artifacts — model weights, exports, experiment tracking
+# -----------------------------------------------------------------------------
 *.pth
 *.pt
+*.ckpt
 *.onnx
+*.h5
+*.hdf5
 *.pb
 *.tflite
+*.safetensors
+*.pkl
+*.pickle
+*.joblib
+*.npy
+*.npz
+*.tfrecord
+/runs/
+/wandb/
+/mlruns/
+/lightning_logs/
+/tensorboard_logs/
+events.out.tfevents.*
 
-# Logs
-*.log
-logs/
-tensorboard_logs/
-runs/
 
-# Checkpoints
-checkpoints/
-models/saved_models/
-models/best_model.pth
-models/checkpoint_*.pth
+# -----------------------------------------------------------------------------
+# 5. Data & audio — the dataset NEVER leaves the local machine.
+#    NOTE: the root-anchored patterns below (/dataset/, /data/, /test_audio/)
+#    are deliberate. The previous unanchored "data/" rule also matched the
+#    src/data/ Python package and silently kept the entire data-loading
+#    module (text_transform.py, dataset.py, custom_dataset.py, transforms.py)
+#    out of version control.
+# -----------------------------------------------------------------------------
+/checkpoints/
+/dataset/
+/data/
+/datasets/
+/test_audio/
+# Internal engineering notes & working documentation — local only, never published
+/notes/
 
-# Data
-data/
-datasets/
-test_audio/
+# Audio containers
 *.wav
 *.mp3
 *.flac
+*.m4a
+*.aac
+*.ogg
+*.opus
+# To ever publish a small demo clip, re-include it explicitly, e.g.:
+# !assets/demo.wav
 
-# OS
+# Structured data files — transcripts and manifests are data, not source.
+# (The private transcripts of this project are JSON; never let one land in
+# the repo by accident.) Re-include a curated public file explicitly, e.g.:
+#   !assets/sample_transcript.json
+*.json
+*.csv
+*.tsv
+
+# Notebooks execute against the private dataset and embed outputs — keep them
+# local unless deliberately curated for publication:
+#   !notebooks/demo.ipynb
+*.ipynb
+
+
+# -----------------------------------------------------------------------------
+# 6. Logs & crash dumps (TensorBoard event files embed the machine hostname)
+# -----------------------------------------------------------------------------
+/logs/
+*.log
+*.out
+*.err
+*.dmp
+core
+core.*
+hs_err_pid*
+replay_pid*
+
+
+# -----------------------------------------------------------------------------
+# 7. OS-generated files
+# -----------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.TemporaryItems
 Thumbs.db
-desktop.ini
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+~$*
+*.tmp
+.~lock.*#
 
-dataset/
+
+# -----------------------------------------------------------------------------
+# 8. IDE / editor / local AI-tooling configuration
+# -----------------------------------------------------------------------------
+.idea/
+.vscode/
+.vs/
+*.code-workspace
+*.iml
+*.ipr
+*.iws
+*.user
+*.suo
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+.history/
+.claude/
+.cursor/
+
+
+# -----------------------------------------------------------------------------
+# 9. Archives (fat-finger protection for large dataset/model bundles)
+# -----------------------------------------------------------------------------
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.gz
+*.7z
+*.rar
+
+
+# -----------------------------------------------------------------------------
+# 10. ALLOWLIST FENCE (least privilege)
+# -----------------------------------------------------------------------------
+# "/*" ignores EVERYTHING at the repository root; the "!/..." lines below
+# re-include only what is approved for publication. A new root-level file is
+# ignored by default — add an explicit "!/..." line when one is intentionally
+# published. (A directory must be re-included before its contents can be.)
+# To later publish one of the commented-out items, uncomment its line.
+# -----------------------------------------------------------------------------
+/*
+!/.gitignore
+!/.env.example
+!/LICENSE
+!/README.md
+# !/CONTRIBUTING.md
+# !/SECURITY.md
+# !/.gitattributes
+# !/.github/
+!/requirements.txt
+!/configs/
+configs/*.yaml
+!configs/*.example.yaml
+!/scripts/
+!/src/

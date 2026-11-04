@@ -1,11 +1,25 @@
 """
 Configuration management utilities for loading YAML config files.
+
+Configuration is loaded in two stages:
+
+1. The YAML file (``configs/default_config.yaml``, local only) provides the
+   base structure and dataset paths.
+2. :func:`apply_env_overrides` overlays the tuned configuration matrix from
+   ``STT_*`` environment variables (loaded from the git-ignored ``.env``).
+
+The tuned values (hyperparameters, blank-penalty tier matrix, logic toggles)
+are REQUIRED environment variables with no code-level fallbacks: the project
+intentionally fails fast until the matrix is provided. See ``.env.example``
+for the full documented matrix.
 """
 
 import yaml
 from typing import Dict, Any, Optional
 from pathlib import Path
 from dataclasses import dataclass, field
+
+from .env import EnvSource, load_env_file, optional_env, to_bool
 
 
 @dataclass
@@ -33,6 +47,7 @@ class TrainingConfig:
     batch_size: int = 10
     epochs: int = 1
     learning_rate: float = 5e-4
+    max_lr: Optional[float] = None  # Peak LR for OneCycleLR; injected from STT_TRAIN_MAX_LR
     weight_decay: float = 1e-5
     gradient_accumulation_steps: int = 1
     max_grad_norm: float = 1.0
@@ -44,6 +59,7 @@ class TrainingConfig:
     early_stopping_patience: Optional[int] = None
     scheduler_type: str = "onecycle"  # "onecycle", "cosine", "step", None
     scheduler_params: Dict[str, Any] = field(default_factory=dict)
+    warmup_steps: int = 0  # Linear LR warmup steps; injected from STT_TRAIN_WARMUP_STEPS
 
 
 @dataclass
@@ -81,6 +97,110 @@ class Config:
     seed: int = 42
 
 
+def apply_env_overrides(config: Config) -> Config:
+    """
+    Overlay the tuned configuration matrix from environment variables.
+
+    Every variable below is REQUIRED and has no fallback in code: the
+    repository intentionally ships without working training values. The
+    local git-ignored ``.env`` file (or an injected environment) provides
+    them; ``.env.example`` documents the full matrix. If any variable is
+    missing, a single :class:`MissingEnvironmentError` is raised listing
+    everything that must be set.
+
+    Optional infrastructure variables (paths, device, worker counts) have
+    safe generic defaults and may be omitted.
+    """
+    load_env_file()
+    env = EnvSource()
+
+    # --- Model architecture (tuned; no code-level defaults) ---
+    config.model.n_cnn_layers = env.require("STT_MODEL_N_CNN_LAYERS", int)
+    config.model.n_rnn_layers = env.require("STT_MODEL_N_RNN_LAYERS", int)
+    config.model.rnn_dim = env.require("STT_MODEL_RNN_DIM", int)
+    config.model.n_feats = env.require("STT_MODEL_N_FEATS", int)
+    config.model.dropout = env.require("STT_MODEL_DROPOUT", float)
+    config.model.use_attention = env.require("STT_MODEL_USE_ATTENTION", to_bool)
+    config.model.n_attention_heads = env.require("STT_MODEL_N_ATTENTION_HEADS", int)
+    config.model.use_transformer = env.require("STT_MODEL_USE_TRANSFORMER", to_bool)
+    config.model.use_se = env.require("STT_MODEL_USE_SE", to_bool)
+    config.model.use_chunked_attention = env.require(
+        "STT_MODEL_USE_CHUNKED_ATTENTION", to_bool
+    )
+    config.model.attention_chunk_size = env.require(
+        "STT_MODEL_ATTENTION_CHUNK_SIZE", int
+    )
+    config.model.attention_overlap = env.require("STT_MODEL_ATTENTION_OVERLAP", int)
+
+    # --- Training schedule (tuned; no code-level defaults) ---
+    config.training.batch_size = env.require("STT_TRAIN_BATCH_SIZE", int)
+    config.training.epochs = env.require("STT_TRAIN_EPOCHS", int)
+    config.training.learning_rate = env.require("STT_TRAIN_LEARNING_RATE", float)
+    config.training.max_lr = env.require("STT_TRAIN_MAX_LR", float)
+    config.training.weight_decay = env.require("STT_TRAIN_WEIGHT_DECAY", float)
+    config.training.gradient_accumulation_steps = env.require(
+        "STT_TRAIN_GRADIENT_ACCUMULATION_STEPS", int
+    )
+    config.training.warmup_steps = env.require("STT_TRAIN_WARMUP_STEPS", int)
+    config.training.scheduler_type = env.require("STT_TRAIN_SCHEDULER_TYPE", str)
+    config.training.early_stopping_patience = env.require(
+        "STT_TRAIN_EARLY_STOPPING_PATIENCE", int
+    )
+    config.training.validate_every = env.require("STT_TRAIN_VALIDATE_EVERY", int)
+    config.training.save_every = env.require("STT_TRAIN_SAVE_EVERY", int)
+
+    # --- Data pipeline (tuned; no code-level defaults) ---
+    config.data.dataset_type = env.require("STT_DATA_DATASET_TYPE", str)
+    config.data.include_persian = env.require("STT_DATA_INCLUDE_PERSIAN", to_bool)
+    config.data.train_split = env.require("STT_DATA_TRAIN_SPLIT", float)
+    config.data.n_mels = env.require("STT_DATA_N_MELS", int)
+    config.data.freq_mask_param = env.require("STT_DATA_FREQ_MASK_PARAM", int)
+    config.data.time_mask_param = env.require("STT_DATA_TIME_MASK_PARAM", int)
+    config.data.num_freq_masks = env.require("STT_DATA_NUM_FREQ_MASKS", int)
+    config.data.num_time_masks = env.require("STT_DATA_NUM_TIME_MASKS", int)
+
+    # --- Optional infrastructure overrides (safe generic defaults) ---
+    config.training.max_grad_norm = optional_env(
+        "STT_TRAIN_MAX_GRAD_NORM", config.training.max_grad_norm, float
+    )
+    config.training.use_amp = optional_env(
+        "STT_TRAIN_USE_AMP", config.training.use_amp, to_bool
+    )
+    config.training.num_workers = optional_env(
+        "STT_TRAIN_NUM_WORKERS", config.training.num_workers, int
+    )
+    config.training.pin_memory = optional_env(
+        "STT_TRAIN_PIN_MEMORY", config.training.pin_memory, to_bool
+    )
+    config.data.sample_rate = optional_env(
+        "STT_DATA_SAMPLE_RATE", config.data.sample_rate, int
+    )
+    config.data.audio_files_dir = optional_env(
+        "STT_DATA_AUDIO_FILES_DIR", config.data.audio_files_dir, str
+    )
+    config.data.transcripts_dir = optional_env(
+        "STT_DATA_TRANSCRIPTS_DIR", config.data.transcripts_dir, str
+    )
+    config.data.test_audio_dir = optional_env(
+        "STT_DATA_TEST_AUDIO_DIR", config.data.test_audio_dir, str
+    )
+    config.data.train_root = optional_env(
+        "STT_DATA_TRAIN_ROOT", config.data.train_root, str
+    )
+    config.data.test_root = optional_env(
+        "STT_DATA_TEST_ROOT", config.data.test_root, str
+    )
+    config.checkpoint_dir = optional_env(
+        "STT_CHECKPOINT_DIR", config.checkpoint_dir, str
+    )
+    config.log_dir = optional_env("STT_LOG_DIR", config.log_dir, str)
+    config.device = optional_env("STT_DEVICE", config.device, str)
+    config.seed = optional_env("STT_SEED", config.seed, int)
+
+    env.finalize()
+    return config
+
+
 def load_config(config_path: str) -> Config:
     """
     Load configuration from YAML file.
@@ -114,7 +234,11 @@ def load_config(config_path: str) -> Config:
         device=config_dict.get('device', 'cuda'),
         seed=config_dict.get('seed', 42)
     )
-    
+
+    # Overlay the tuned configuration matrix from the environment (.env).
+    # Raises MissingEnvironmentError listing every variable that must be set.
+    config = apply_env_overrides(config)
+
     return config
 
 
@@ -147,6 +271,7 @@ def save_config(config: Config, config_path: str) -> None:
             'batch_size': config.training.batch_size,
             'epochs': config.training.epochs,
             'learning_rate': config.training.learning_rate,
+            'max_lr': config.training.max_lr,
             'weight_decay': config.training.weight_decay,
             'gradient_accumulation_steps': config.training.gradient_accumulation_steps,
             'max_grad_norm': config.training.max_grad_norm,
@@ -157,7 +282,8 @@ def save_config(config: Config, config_path: str) -> None:
             'save_every': config.training.save_every,
             'early_stopping_patience': config.training.early_stopping_patience,
             'scheduler_type': config.training.scheduler_type,
-            'scheduler_params': config.training.scheduler_params
+            'scheduler_params': config.training.scheduler_params,
+            'warmup_steps': config.training.warmup_steps
         },
         'data': {
             'dataset_type': config.data.dataset_type,

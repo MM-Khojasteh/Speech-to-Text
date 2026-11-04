@@ -29,41 +29,25 @@ def check_dataset():
         print(f"\nAudio Files Directory: {audio_dir}")
         print(f"  Exists: No")
     
-    # Check JSON files
-    json1 = Path("dataset/info/postgres_laravel_calls.json")
-    json2 = Path("dataset/info/postgres_public_call_transcripts.json")
-    
+    # Check transcript JSON files
     print(f"\nTranscript Files:")
-    
-    if json1.exists():
+
+    transcript_files = sorted(Path("dataset/info").glob("*.json"))
+    if not transcript_files:
+        print("  No JSON transcript files found in dataset/info/")
+    for transcript_file in transcript_files:
         try:
-            with open(json1, 'r', encoding='utf-8') as f:
-                data1 = json.load(f)
-            print(f"  postgres_laravel_calls.json: {len(data1)} entries")
-            if len(data1) > 0:
-                sample = data1[0]
+            with open(transcript_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            print(f"  {transcript_file.name}: {len(data)} entries")
+            if len(data) > 0:
+                sample = data[0]
                 print(f"    Sample keys: {list(sample.keys())}")
-                if 'recording_file' in sample:
-                    print(f"    Sample recording_file: {sample['recording_file']}")
+                for key in ('recording_file', 'audio_file_path'):
+                    if key in sample:
+                        print(f"    Sample {key}: {sample[key]}")
         except Exception as e:
-            print(f"  postgres_laravel_calls.json: Error reading - {e}")
-    else:
-        print(f"  postgres_laravel_calls.json: Not found")
-    
-    if json2.exists():
-        try:
-            with open(json2, 'r', encoding='utf-8') as f:
-                data2 = json.load(f)
-            print(f"  postgres_public_call_transcripts.json: {len(data2)} entries")
-            if len(data2) > 0:
-                sample = data2[0]
-                print(f"    Sample keys: {list(sample.keys())}")
-                if 'audio_file_path' in sample:
-                    print(f"    Sample audio_file_path: {sample['audio_file_path']}")
-        except Exception as e:
-            print(f"  postgres_public_call_transcripts.json: Error reading - {e}")
-    else:
-        print(f"  postgres_public_call_transcripts.json: Not found")
+            print(f"  {transcript_file.name}: Error reading - {e}")
     
     # Check test audio
     test_dir = Path("test_audio")
